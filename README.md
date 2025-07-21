@@ -21,24 +21,6 @@ OpenAstroViz streams, propagates, and visualises **every tracked object in Earth
 
 ---
 
-## 🏗 Project structure
-
-```
-openastroviz/
-│  LICENSE              ← MIT (code) / CC0 (data)
-│  README.md            ← this file
-│  ROADMAP.md           ← milestones & design notes
-│
-├─ core/                ← reference C SGP4 + unit tests
-├─ cuda/                ← CUDA kernels + cust bindings
-├─ webgpu/              ← WASM/WebGPU backend (experimental)
-├─ web/                 ← React + Three.js client, connects via WebSocket
-├─ daemon/              ← Rust native process exposing JSON‑WS over localhost
-└─ docs/                ← architecture diagrams, tutorials
-```
-
----
-
 ## 🚀 Quick start (development)
 
 ```bash
