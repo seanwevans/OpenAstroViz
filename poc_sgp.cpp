@@ -16,29 +16,12 @@
 #include <iostream>
 #include <sstream>
 #include <string>
+#include "poc_sgp.hpp"
 
-constexpr double kPi        = 3.14159265358979323846;
-constexpr double kEarthMu   = 3.986004418e14;  // m^3 s^‑2
-constexpr double kEarthRad  = 6378.137e3;      // m (equatorial)
-constexpr double deg2rad(double d) { return d * kPi / 180.0; }
 
-struct Tle {
-    std::string line1;
-    std::string line2;
-};
-
-struct Orbit {
-    double epoch_jd;      // Julian Date
-    double inc;           // inclination           [rad]
-    double raan;          // right asc. node       [rad]
-    double ecc;           // eccentricity          [unitless]
-    double argp;          // argument of perigee   [rad]
-    double mean_anom;     // mean anomaly          [rad]
-    double mean_motion;   // rev / day             [rad/s after conv.]
-};
 
 // --- very naïve checksum ignore ---
-static Orbit parse_tle(const Tle &tle) {
+Orbit parse_tle(const Tle &tle) {
     Orbit o{};
     // Epoch (yyddd.dddddd)
     int   yy   = std::stoi(tle.line1.substr(18, 2));
@@ -63,7 +46,7 @@ static Orbit parse_tle(const Tle &tle) {
 }
 
 // Kepler solver (Newton‑Raphson on eccentric anomaly)
-static double solve_kepler(double M, double e, int iters = 10) {
+double solve_kepler(double M, double e, int iters = 10) {
     double E = M;
     for (int i = 0; i < iters; ++i) {
         double f   = E - e * sin(E) - M;
@@ -74,7 +57,7 @@ static double solve_kepler(double M, double e, int iters = 10) {
 }
 
 // Propagate Δt seconds via Kepler two‑body
-static void propagate(const Orbit &o, double dt, double &x, double &y, double &z) {
+void propagate(const Orbit &o, double dt, double &x, double &y, double &z) {
     double a = pow(kEarthMu / (o.mean_motion * o.mean_motion), 1.0 / 3.0); // semi‑major
     double n = o.mean_motion;
     double M = o.mean_anom + n * dt;
@@ -102,6 +85,7 @@ static void propagate(const Orbit &o, double dt, double &x, double &y, double &z
     z = z_eci;
 }
 
+#ifndef POC_SGP_NO_MAIN
 int main() {
     std::cout << "# Minimal OpenAstroViz C++ PoC\n";
     std::cout << "Enter two TLE lines separated by newlines:\n";
@@ -124,6 +108,7 @@ int main() {
     }
     return EXIT_SUCCESS;
 }
+#endif // POC_SGP_NO_MAIN
 
 /*
 Compile (C++17):
