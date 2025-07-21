@@ -29,7 +29,7 @@ $ git clone https://github.com/openastroviz/openastroviz.git && cd openastroviz
 $ ./scripts/setup.sh          # installs Rust, CUDA, Node.js + pre‑commit hooks
 
 # 2 – build CUDA backend (requires NVIDIA + nvcc)
-$ cargo run -p openastrovizd -- --bench cuda   # benchmarks, STK vector tests
+$ cargo run -p openastrovizd -- bench cuda   # benchmarks, STK vector tests
 
 # 3 – run the web client (connects to local daemon)
 $ yarn --cwd web install && yarn --cwd web dev   # http://localhost:5173
