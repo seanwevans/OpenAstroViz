@@ -26,7 +26,7 @@ OpenAstroViz streams, propagates, and visualises **every tracked object in Earth
 ```bash
 # 1 – clone & bootstrap
 $ git clone https://github.com/openastroviz/openastroviz.git && cd openastroviz
-$ ./scripts/setup.sh          # toolchain + pre‑commit hooks
+$ ./scripts/setup.sh          # installs Rust, CUDA, Node.js + pre‑commit hooks
 
 # 2 – build CUDA backend (requires NVIDIA + nvcc)
 $ cargo run -p openastrovizd -- --bench cuda   # benchmarks, STK vector tests
