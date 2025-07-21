@@ -47,7 +47,7 @@ Standard [fork → branch → PR](CONTRIBUTING.md) flow.  clang‑format / rustf
 
 ## 📜 License
 
-* **Code:** MIT © 2025 OpenAstroViz Contributors
+* **Code:** [MIT](LICENSE) © 2025 OpenAstroViz Contributors
 * **Data:** CC0 (derived from U.S. Government public‑domain TLEs)
 
 ---
