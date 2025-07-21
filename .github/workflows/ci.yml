@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+      - name: Cache cargo
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: "${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}"
+      - name: Build daemon
+        run: cargo build -p openastrovizd --verbose
+      - name: Run tests
+        run: cargo test --workspace --verbose
+      - name: Check Rust formatting
+        run: cargo fmt --all -- --check
+      - name: Check C/C++ formatting
+        run: |
+          clang-format --version
+          files=$(git ls-files '*.c' '*.cpp' '*.h' '*.hpp' '*.cu' '*.cuh')
+          if [ -n "$files" ]; then
+            clang-format -n -Werror $files
+          fi
