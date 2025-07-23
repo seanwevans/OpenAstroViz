@@ -37,6 +37,8 @@ $ yarn --cwd web install && yarn --cwd web dev   # http://localhost:5173
 
 If you don’t have an NVIDIA GPU, skip `cuda/` and work on the **cpu‑simd** reference path or UI issues labelled *good first issue*.
 
+Note that the current repository only provides a **proof‑of‑concept** propagator.  Its results have significant accuracy limitations and are not suitable for operational use.  See [`poc_sgp.cpp`](poc_sgp.cpp) for implementation details and known issues.
+
 ---
 
 ## 🧩 Contributing
