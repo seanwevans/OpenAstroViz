@@ -19,15 +19,35 @@ else
 fi
 
 use_apt=false
+use_brew=false
+
 if [[ "$OS_ID" == "debian" || "$OS_ID" == "ubuntu" || "$OS_LIKE" == *debian* || "$OS_LIKE" == *ubuntu* ]]; then
-    use_apt=true
+    if command -v apt-get >/dev/null 2>&1; then
+        use_apt=true
+    else
+        info "Warning: apt-get not found. Packages must be installed manually."
+    fi
+elif [[ "$OS_ID" == "Darwin" || "$OS_ID" == "darwin" ]]; then
+    if command -v brew >/dev/null 2>&1; then
+        use_brew=true
+    else
+        info "Warning: Homebrew not found. Packages must be installed manually."
+    fi
 fi
 
 install_rust() {
     if ! command -v cargo >/dev/null 2>&1; then
-        info "Installing Rust via rustup"
-        curl https://sh.rustup.rs -sSf | sh -s -- -y
-        export PATH="$HOME/.cargo/bin:$PATH"
+        if $use_apt; then
+            info "Installing Rust via rustup"
+            curl https://sh.rustup.rs -sSf | sh -s -- -y
+            export PATH="$HOME/.cargo/bin:$PATH"
+        elif $use_brew; then
+            info "Installing Rust via Homebrew"
+            brew install rustup-init
+            rustup-init -y
+        else
+            info "Please install Rust manually for your OS."
+        fi
     else
         info "Rust already installed"
     fi
@@ -39,6 +59,13 @@ install_cuda() {
             info "Installing NVIDIA CUDA toolkit (apt)"
             sudo apt-get update
             sudo apt-get install -y nvidia-cuda-toolkit
+        elif $use_brew; then
+            if brew info cuda >/dev/null 2>&1; then
+                info "Installing NVIDIA CUDA toolkit (brew)"
+                brew install --cask cuda || brew install cuda
+            else
+                info "CUDA formula not found; skipping CUDA installation"
+            fi
         else
             info "Please install the NVIDIA CUDA toolkit manually for your OS."
         fi
@@ -53,6 +80,9 @@ install_node() {
             info "Installing Node.js (apt)"
             sudo apt-get update
             sudo apt-get install -y nodejs npm
+        elif $use_brew; then
+            info "Installing Node.js (brew)"
+            brew install node
         else
             info "Please install Node.js and npm manually for your OS."
         fi
