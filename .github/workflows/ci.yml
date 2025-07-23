@@ -23,6 +23,18 @@ jobs:
             ~/.cargo/git
             target
           key: "${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}"
+      - name: Install Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+      - name: Install Yarn
+        run: npm install -g yarn
+      - name: Install web dependencies
+        run: yarn --cwd web install --frozen-lockfile
+      - name: Build or lint web
+        run: |
+          yarn --cwd web run lint --if-present
+          yarn --cwd web run build --if-present
       - name: Build daemon
         run: cargo build -p openastrovizd --verbose
       - name: Run tests
