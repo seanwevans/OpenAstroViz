@@ -15,7 +15,8 @@ running `./scripts/setup.sh` once and then `pre-commit run --files <changed file
 
 * **C/C++/CUDA:** formatted with `clang-format`.
 * **Rust:** formatted with `rustfmt`.
-* **JavaScript/TypeScript:** formatted with `eslint --fix` and `prettier`.
+* **JavaScript/TypeScript:** formatted with `eslint --fix` and `prettier`. Run
+  `npm run lint` in `web/` before committing.
 * **CUDA kernels:** follow the guidance in [docs/cuda_style.md](docs/cuda_style.md).
 
 PRs that do not pass formatting checks will be blocked by CI.

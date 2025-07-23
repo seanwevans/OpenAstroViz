@@ -29,6 +29,16 @@ jobs:
         run: cargo test --workspace --verbose
       - name: Check Rust formatting
         run: cargo fmt --all -- --check
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18
+      - name: Install web dependencies
+        run: npm install
+        working-directory: web
+      - name: Run web linter
+        run: npm run lint
+        working-directory: web
       - name: Check C/C++ formatting
         run: |
           clang-format --version
