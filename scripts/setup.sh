@@ -31,6 +31,8 @@ install_rust() {
     else
         info "Rust already installed"
     fi
+    info "Setting local Rust toolchain to stable"
+    rustup override set stable
 }
 
 install_cuda() {
@@ -61,6 +63,15 @@ install_node() {
     fi
 }
 
+install_yarn() {
+    if ! command -v yarn >/dev/null 2>&1; then
+        info "Installing Yarn"
+        npm install -g yarn
+    else
+        info "Yarn already installed"
+    fi
+}
+
 setup_precommit() {
     if ! command -v pre-commit >/dev/null 2>&1; then
         info "Installing pre-commit"
@@ -74,6 +85,7 @@ info "Detected OS: $OS_ID"
 install_rust
 install_cuda
 install_node
+install_yarn
 setup_precommit
 
 info "Done. You may need to restart your shell for PATH changes to take effect."

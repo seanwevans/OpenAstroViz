@@ -8,15 +8,20 @@ OpenAstroViz welcomes pull requests from everyone. The typical workflow is:
 4. Push the branch to your fork and open a pull request against `main`.
 5. Keep the PR rebased on the latest `main` until it is merged.
 
-CI runs on every commit. Ensure `pre-commit` passes locally before pushing by
-running `./scripts/setup.sh` once and then `pre-commit run --files <changed files>`.
+CI runs on every commit. Run `./scripts/setup.sh` once to install the
+`pre-commit` hooks. The hooks will automatically format code on each commit.
+You can also check formatting manually with:
+
+```bash
+pre-commit run --all-files
+```
 
 ### Code style
 
 * **C/C++/CUDA:** formatted with `clang-format`.
 * **Rust:** formatted with `rustfmt`.
-* **JavaScript/TypeScript:** formatted with `eslint --fix` and `prettier`.
+* **JavaScript/TypeScript:** formatted with `eslint --fix` and `prettier`. Run
+  `npm run lint` in `web/` before committing.
 * **CUDA kernels:** follow the guidance in [docs/cuda_style.md](docs/cuda_style.md).
 
 PRs that do not pass formatting checks will be blocked by CI.
-

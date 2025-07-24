@@ -1,5 +1,8 @@
 use clap::{Parser, Subcommand};
 
+mod bench;
+use bench::bench_backend;
+
 #[derive(Parser)]
 #[command(author, version, about = "OpenAstroViz daemon")]
 struct Cli {
@@ -31,7 +34,7 @@ fn main() {
             println!("Daemon status: unknown (placeholder)");
         }
         Some(Commands::Bench { backend }) => {
-            println!("Running benchmarks for {backend} backend... (placeholder)");
+            bench_backend(&backend);
         }
         None => {
             println!("openastrovizd {}", env!("CARGO_PKG_VERSION"));
