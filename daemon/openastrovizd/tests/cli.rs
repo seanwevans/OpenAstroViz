@@ -35,6 +35,7 @@ fn bench_cuda_subcommand() {
         .assert()
         .success()
         .stdout(predicate::str::contains("cuda"));
+}
 
 #[test]
 fn help_includes_description() {
