@@ -5,7 +5,6 @@ OpenAstroViz streams, propagates, and visualises **every tracked object in Earth
 
 > **Mission statement:** Democratise space‑situational awareness.  Provide a transparent, vendor‑neutral SSA stack that anyone can run locally or fork for research.
 
-![OpenAstroViz hero screenshot](docs/assets/hero_placeholder.png)
 
 ---
 
@@ -54,4 +53,3 @@ Standard [fork → branch → PR](CONTRIBUTING.md) flow.  clang‑format / rustf
 * **Data:** CC0 (derived from U.S. Government public‑domain TLEs)
 
 ---
-
