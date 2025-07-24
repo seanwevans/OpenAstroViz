@@ -31,6 +31,8 @@ install_rust() {
     else
         info "Rust already installed"
     fi
+    info "Setting local Rust toolchain to stable"
+    rustup override set stable
 }
 
 install_cuda() {
