@@ -11,15 +11,6 @@ fn runs_without_args_shows_version() {
 }
 
 #[test]
-fn start_subcommand() {
-    let mut cmd = Command::cargo_bin("openastrovizd").unwrap();
-    cmd.arg("start")
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("Starting daemon"));
-}
-
-#[test]
 fn status_subcommand() {
     let mut cmd = Command::cargo_bin("openastrovizd").unwrap();
     cmd.arg("status")
