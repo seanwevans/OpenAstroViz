@@ -1,10 +1,12 @@
 use std::time::{Duration, Instant};
 
+use crate::Backend;
+
 /// Runs a stub benchmark for the given backend.
 ///
 /// This currently performs a dummy computation to provide
 /// an example of how benchmarking might be implemented.
-pub fn bench_backend(backend: &str) -> Duration {
+pub fn bench_backend(backend: Backend) -> Duration {
     let start = Instant::now();
     // Dummy workload: simple integer sum
     let mut sum: u64 = 0;
@@ -13,8 +15,8 @@ pub fn bench_backend(backend: &str) -> Duration {
     }
     let elapsed = start.elapsed();
     println!(
-        "Benchmark for backend {backend}: computed sum={} in {:?}",
-        sum, elapsed
+        "Benchmark for backend {}: computed sum={} in {:?}",
+        backend, sum, elapsed
     );
     elapsed
 }
@@ -25,7 +27,7 @@ mod tests {
 
     #[test]
     fn bench_returns_duration() {
-        let dur = bench_backend("test");
+        let dur = bench_backend(Backend::Cpu);
         assert!(dur > Duration::ZERO);
     }
 }

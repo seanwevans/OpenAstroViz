@@ -29,6 +29,16 @@ fn bench_cuda_subcommand() {
 }
 
 #[test]
+fn bench_help_lists_backends() {
+    Command::cargo_bin("openastrovizd")
+        .unwrap()
+        .args(["bench", "--help"])
+        .assert()
+        .success()
+        .stdout(contains("cpu").and(contains("cuda")));
+}
+
+#[test]
 fn help_includes_description() {
     Command::cargo_bin("openastrovizd")
         .unwrap()
