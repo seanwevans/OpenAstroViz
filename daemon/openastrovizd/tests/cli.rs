@@ -20,12 +20,18 @@ fn status_subcommand() {
 }
 
 #[test]
-fn bench_cuda_subcommand() {
+fn bench_cuda_supported() {
     let mut cmd = Command::cargo_bin("openastrovizd").unwrap();
-    cmd.args(["bench", "cuda"])
+    cmd.args(["bench", "cuda"]).assert().success();
+}
+
+#[test]
+fn bench_cpu_unsupported() {
+    let mut cmd = Command::cargo_bin("openastrovizd").unwrap();
+    cmd.args(["bench", "cpu"])
         .assert()
-        .success()
-        .stdout(predicate::str::contains("cuda"));
+        .failure()
+        .stderr(contains("unsupported"));
 }
 
 #[test]
