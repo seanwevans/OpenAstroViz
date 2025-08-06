@@ -1,7 +1,7 @@
 use clap::{Parser, Subcommand};
 
 mod bench;
-use bench::bench_backend;
+use bench::{bench_backend, Backend, BenchError};
 
 #[derive(Parser)]
 #[command(author, version, about = "OpenAstroViz daemon")]
@@ -19,7 +19,7 @@ enum Commands {
     /// Run benchmarks for a backend
     Bench {
         /// Backend to benchmark (e.g. cuda)
-        backend: String,
+        backend: Backend,
     },
 }
 
@@ -34,7 +34,19 @@ fn main() {
             println!("Daemon status: unknown (placeholder)");
         }
         Some(Commands::Bench { backend }) => {
-            bench_backend(&backend);
+            match bench_backend(backend) {
+                Ok(duration) => {
+                    println!("Benchmark for {backend:?} completed in {:?}", duration);
+                }
+                Err(BenchError::Unsupported) => {
+                    eprintln!("Backend {backend:?} is unsupported");
+                    std::process::exit(1);
+                }
+                Err(BenchError::Failed) => {
+                    eprintln!("Benchmark for {backend:?} failed");
+                    std::process::exit(1);
+                }
+            }
         }
         None => {
             println!("openastrovizd {}", env!("CARGO_PKG_VERSION"));
