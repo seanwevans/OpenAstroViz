@@ -40,7 +40,6 @@ install_rust() {
         if $use_apt; then
             info "Installing Rust via rustup"
             curl https://sh.rustup.rs -sSf | sh -s -- -y
-            export PATH="$HOME/.cargo/bin:$PATH"
         elif $use_brew; then
             info "Installing Rust via Homebrew"
             brew install rustup-init
@@ -48,6 +47,8 @@ install_rust() {
         else
             info "Please install Rust manually for your OS."
         fi
+        # Source cargo environment so rustup and cargo are in PATH for subsequent commands
+        [ -f "$HOME/.cargo/env" ] && source "$HOME/.cargo/env"
     else
         info "Rust already installed"
     fi
