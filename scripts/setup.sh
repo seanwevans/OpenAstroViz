@@ -11,6 +11,7 @@ info() { echo -e "\033[1;34m[setup]\033[0m $1"; }
 OS_ID="unknown"
 OS_LIKE=""
 if [ -f /etc/os-release ]; then
+    # shellcheck source=/dev/null
     . /etc/os-release
     OS_ID="$ID"
     OS_LIKE="${ID_LIKE:-}"
@@ -34,6 +35,16 @@ elif [[ "$OS_ID" == "Darwin" || "$OS_ID" == "darwin" ]]; then
         info "Warning: Homebrew not found. Packages must be installed manually."
     fi
 fi
+
+# Track apt-get update usage
+apt_updated=false
+apt_update() {
+    if $use_apt && ! $apt_updated; then
+        info "Updating apt package list"
+        sudo apt-get update
+        apt_updated=true
+    fi
+}
 
 install_rust() {
     if ! command -v cargo >/dev/null 2>&1; then
@@ -59,7 +70,6 @@ install_cuda() {
     if ! command -v nvcc >/dev/null 2>&1; then
         if $use_apt; then
             info "Installing NVIDIA CUDA toolkit (apt)"
-            sudo apt-get update
             sudo apt-get install -y nvidia-cuda-toolkit
         elif $use_brew; then
             if brew info cuda >/dev/null 2>&1; then
@@ -80,7 +90,6 @@ install_node() {
     if ! command -v node >/dev/null 2>&1; then
         if $use_apt; then
             info "Installing Node.js (apt)"
-            sudo apt-get update
             sudo apt-get install -y nodejs npm
         elif $use_brew; then
             info "Installing Node.js (brew)"
@@ -112,6 +121,7 @@ setup_precommit() {
 }
 
 info "Detected OS: $OS_ID"
+apt_update
 install_rust
 install_cuda
 install_node
