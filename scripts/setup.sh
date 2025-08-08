@@ -59,6 +59,7 @@ install_rust() {
             info "Please install Rust manually for your OS."
         fi
         # Source cargo environment so rustup and cargo are in PATH for subsequent commands
+        # shellcheck source=/dev/null
         [ -f "$HOME/.cargo/env" ] && source "$HOME/.cargo/env"
     else
         info "Rust already installed"
@@ -114,8 +115,13 @@ install_yarn() {
 
 setup_precommit() {
     if ! command -v pre-commit >/dev/null 2>&1; then
-        info "Installing pre-commit"
-        pip install --user pre-commit
+        if command -v python3 >/dev/null 2>&1; then
+            info "Installing pre-commit"
+            python3 -m pip install --user pre-commit
+        else
+            info "Warning: python3 not found. Skipping pre-commit installation."
+            return
+        fi
     fi
     info "Installing git hooks"
     pre-commit install
