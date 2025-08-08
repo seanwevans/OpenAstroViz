@@ -17,6 +17,8 @@
 #include <sstream>
 #include <string>
 
+#include "julian.hpp"
+
 constexpr double kPi = 3.14159265358979323846;
 constexpr double kEarthMu = 3.986004418e14; // m^3 s^‑2
 constexpr double kEarthRad = 6378.137e3;    // m (equatorial)
@@ -45,12 +47,7 @@ static Orbit parse_tle(const Tle &tle) {
     int doy = std::stoi(tle.line1.substr(20, 3));
     double frac_day = std::stod(tle.line1.substr(23, 8));
     int year = (yy < 57 ? 2000 + yy : 1900 + yy);
-    // Julian date conversion (simplified)
-    int A = (14 - 1) / 12;
-    int Y = year + 4800 - A;
-    int M = 1 + 12 * A - 3;
-    long JDN = doy + (153 * M + 2) / 5 + 365 * Y + Y / 4 - Y / 100 + Y / 400 - 32045;
-    o.epoch_jd = JDN + frac_day;
+    o.epoch_jd = julian_date_from_doy(year, doy, frac_day);
 
     o.inc = deg2rad(std::stod(tle.line2.substr(8, 8)));
     o.raan = deg2rad(std::stod(tle.line2.substr(17, 8)));
