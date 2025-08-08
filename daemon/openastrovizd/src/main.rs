@@ -2,7 +2,6 @@ use clap::{Parser, Subcommand};
 
 mod backend;
 mod bench;
-
 use backend::Backend;
 use bench::{bench_backend, BenchError};
 
