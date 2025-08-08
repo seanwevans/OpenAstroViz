@@ -47,6 +47,20 @@ apt_update() {
 }
 
 install_rust() {
+    if ! command -v curl >/dev/null 2>&1; then
+        if $use_apt; then
+            info "curl not found. Installing curl (apt)"
+            apt_update
+            sudo apt-get install -y curl
+        elif $use_brew; then
+            info "curl not found. Installing curl (brew)"
+            brew install curl
+        else
+            info "Error: curl is required to install Rust. Please install curl and re-run."
+            return 1
+        fi
+    fi
+
     if ! command -v cargo >/dev/null 2>&1; then
         if $use_apt; then
             info "Installing Rust via rustup"
