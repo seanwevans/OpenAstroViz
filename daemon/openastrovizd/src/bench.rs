@@ -1,16 +1,6 @@
 use std::time::{Duration, Instant};
 
-
-use clap::ValueEnum;
-
-/// Supported backends for benchmarking.
-#[derive(Clone, Copy, Debug, ValueEnum)]
-pub enum Backend {
-    /// CUDA backend
-    Cuda,
-    /// CPU backend (currently unsupported)
-    Cpu,
-}
+use crate::backend::Backend;
 
 /// Errors that can occur while benchmarking.
 #[derive(Debug)]
@@ -46,6 +36,7 @@ pub fn bench_backend(backend: Backend) -> Result<Duration, BenchError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::backend::Backend;
 
     #[test]
     fn bench_returns_duration() {
@@ -55,6 +46,9 @@ mod tests {
 
     #[test]
     fn bench_returns_error_for_unsupported() {
-        assert!(matches!(bench_backend(Backend::Cpu), Err(BenchError::Unsupported)));
+        assert!(matches!(
+            bench_backend(Backend::Cpu),
+            Err(BenchError::Unsupported)
+        ));
     }
 }
