@@ -3,7 +3,7 @@ use std::fmt;
 use clap::{Parser, Subcommand, ValueEnum};
 
 mod bench;
-use bench::{bench_backend, Backend, BenchError};
+use bench::{bench_backend, BenchError};
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
 pub enum Backend {
@@ -52,7 +52,10 @@ fn main() {
             println!("Daemon status: unknown (placeholder)");
         }
         Some(Commands::Bench { backend }) => {
-
+            let backend = match backend {
+                Backend::Cuda => bench::Backend::Cuda,
+                Backend::Cpu => bench::Backend::Cpu,
+            };
             match bench_backend(backend) {
                 Ok(duration) => {
                     println!("Benchmark for {backend:?} completed in {:?}", duration);
@@ -66,9 +69,6 @@ fn main() {
                     std::process::exit(1);
                 }
             }
-
-            bench_backend(backend);
-
         }
         None => {
             println!("openastrovizd {}", env!("CARGO_PKG_VERSION"));
