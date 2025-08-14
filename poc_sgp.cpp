@@ -14,7 +14,6 @@
 #include <cstdlib>
 #include <iomanip>
 #include <iostream>
-#include <sstream>
 #include <string>
 
 #include "julian.hpp"
@@ -47,7 +46,7 @@ static Orbit parse_tle(const Tle &tle) {
     int doy = std::stoi(tle.line1.substr(20, 3));
     double frac_day = std::stod(tle.line1.substr(23, 8));
     int year = (yy < 57 ? 2000 + yy : 1900 + yy);
-    o.epoch_jd = julian_date_from_doy(year, doy, frac_day);
+    o.epoch_jd = julian::julian_date_from_doy(year, doy, frac_day);
 
     o.inc = deg2rad(std::stod(tle.line2.substr(8, 8)));
     o.raan = deg2rad(std::stod(tle.line2.substr(17, 8)));

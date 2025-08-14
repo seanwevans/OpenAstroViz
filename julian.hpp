@@ -4,6 +4,8 @@
 #include <cassert>
 #include <cmath>
 
+namespace julian {
+
 inline bool is_leap_year(int year) {
     return (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0);
 }
@@ -46,5 +48,7 @@ inline double julian_date_from_doy(int year, int doy, double frac_day) {
     assert(ok && "Day of year out of range");
     return julian_date_from_calendar(year, month, day, frac_day);
 }
+
+} // namespace julian
 
 #endif // JULIAN_HPP
