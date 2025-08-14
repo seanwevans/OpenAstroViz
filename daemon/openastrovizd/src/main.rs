@@ -49,8 +49,6 @@ fn main() {
                     std::process::exit(1);
                 }
             }
-
-            bench_backend(backend);
         }
         None => {
             println!("openastrovizd {}", env!("CARGO_PKG_VERSION"));
