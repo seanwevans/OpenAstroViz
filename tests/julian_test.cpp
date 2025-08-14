@@ -1,5 +1,6 @@
-#include <cassert>
+#include <catch2/catch_test_macros.hpp>
 #include <cmath>
+
 #include "julian.hpp"
 
 int main() {
