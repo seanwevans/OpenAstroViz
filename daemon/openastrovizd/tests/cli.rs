@@ -16,7 +16,7 @@ fn status_subcommand() {
     cmd.arg("status")
         .assert()
         .success()
-        .stdout(predicate::str::contains("Daemon status"));
+        .stdout(predicate::str::contains("Daemon is not running"));
 }
 
 #[test]
@@ -58,5 +58,5 @@ fn start_subcommand_outputs_message() {
         .arg("start")
         .assert()
         .success()
-        .stdout(contains("Starting daemon"));
+        .stdout(contains("Daemon started"));
 }

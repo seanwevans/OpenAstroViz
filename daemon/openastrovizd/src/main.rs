@@ -2,6 +2,7 @@ use clap::{Parser, Subcommand};
 
 mod backend;
 mod bench;
+mod daemon;
 use backend::Backend;
 use bench::{bench_backend, BenchError};
 
@@ -29,12 +30,20 @@ fn main() {
     let cli = Cli::parse();
 
     match cli.command {
-        Some(Commands::Start) => {
-            println!("Starting daemon... (placeholder)");
-        }
-        Some(Commands::Status) => {
-            println!("Daemon status: unknown (placeholder)");
-        }
+        Some(Commands::Start) => match daemon::start_daemon() {
+            Ok(message) => println!("{message}"),
+            Err(e) => {
+                eprintln!("Failed to start daemon: {e}");
+                std::process::exit(1);
+            }
+        },
+        Some(Commands::Status) => match daemon::check_status() {
+            Ok(status) => println!("{status}"),
+            Err(e) => {
+                eprintln!("Failed to check daemon status: {e}");
+                std::process::exit(1);
+            }
+        },
         Some(Commands::Bench { backend }) => {
             match bench_backend(backend) {
                 Ok(duration) => {
