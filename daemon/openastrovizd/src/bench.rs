@@ -4,8 +4,11 @@ use crate::backend::Backend;
 
 /// Errors that can occur while benchmarking.
 #[derive(Debug)]
+#[allow(dead_code)]
 pub enum BenchError {
-    /// The requested backend is not yet supported.
+    /// The requested backend is not supported.
+    ///
+    /// Currently supported backends are [`Backend::Cpu`] and [`Backend::Cuda`].
     Unsupported,
     /// The benchmark failed to execute.
     Failed,
@@ -17,7 +20,7 @@ pub enum BenchError {
 /// of how benchmarking might be implemented.
 pub fn bench_backend(backend: Backend) -> Result<Duration, BenchError> {
     match backend {
-        Backend::Cuda => {
+        Backend::Cuda | Backend::Cpu => {
             let start = Instant::now();
             // Dummy workload: simple integer sum
             let mut sum: u64 = 0;
@@ -29,7 +32,6 @@ pub fn bench_backend(backend: Backend) -> Result<Duration, BenchError> {
             let _ = sum;
             Ok(elapsed)
         }
-        Backend::Cpu => Err(BenchError::Unsupported),
     }
 }
 
@@ -42,13 +44,8 @@ mod tests {
     fn bench_returns_duration() {
         let dur = bench_backend(Backend::Cuda).expect("benchmark failed");
         assert!(dur > Duration::ZERO);
-    }
 
-    #[test]
-    fn bench_returns_error_for_unsupported() {
-        assert!(matches!(
-            bench_backend(Backend::Cpu),
-            Err(BenchError::Unsupported)
-        ));
+        let dur = bench_backend(Backend::Cpu).expect("benchmark failed");
+        assert!(dur > Duration::ZERO);
     }
 }
