@@ -3,6 +3,8 @@
 
 #include <cmath>
 
+namespace julian {
+
 inline bool is_leap_year(int year) {
     return (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0);
 }
@@ -40,5 +42,7 @@ inline double julian_date_from_doy(int year, int doy, double frac_day) {
     doy_to_month_day(year, doy, month, day);
     return julian_date_from_calendar(year, month, day, frac_day);
 }
+
+} // namespace julian
 
 #endif // JULIAN_HPP
