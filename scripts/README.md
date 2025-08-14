@@ -10,6 +10,16 @@ Run it from the repository root:
 ./scripts/setup.sh
 ```
 
+## Testing
+
+The `run_tests.sh` script compiles and runs the C++ unit tests. Ensure the
+Catch2 library is installed (for example via `apt-get install catch2`) and
+execute:
+
+```bash
+./scripts/run_tests.sh
+```
+
 ## Windows
 
 `setup.sh` does not currently automate installation on Windows. Install the following tools manually:
