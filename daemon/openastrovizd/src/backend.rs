@@ -6,7 +6,7 @@ use std::fmt;
 pub enum Backend {
     /// CUDA backend
     Cuda,
-    /// CPU backend (currently unsupported)
+    /// CPU backend
     Cpu,
 }
 

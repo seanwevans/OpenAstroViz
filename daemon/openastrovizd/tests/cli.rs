@@ -26,12 +26,9 @@ fn bench_cuda_supported() {
 }
 
 #[test]
-fn bench_cpu_unsupported() {
+fn bench_cpu_supported() {
     let mut cmd = Command::cargo_bin("openastrovizd").unwrap();
-    cmd.args(["bench", "cpu"])
-        .assert()
-        .failure()
-        .stderr(contains("unsupported"));
+    cmd.args(["bench", "cpu"]).assert().success();
 }
 
 #[test]
