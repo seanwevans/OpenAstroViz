@@ -21,6 +21,12 @@ repos:
       - id: clippy
       - id: cargo-check
 
+  - repo: https://github.com/scop/pre-commit-shfmt
+    rev: v3.12.0-2
+    hooks:
+      - id: shfmt
+        args: ["-i", "4", "-ci", "-bn"]
+
   - repo: https://github.com/shellcheck-py/shellcheck-py
     rev: v0.10.0.1
     hooks:
