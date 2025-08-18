@@ -1,8 +1,8 @@
 #ifndef JULIAN_HPP
 #define JULIAN_HPP
 
-#include <cassert>
 #include <cmath>
+#include <optional>
 
 namespace julian {
 
@@ -42,10 +42,14 @@ inline double julian_date_from_calendar(int year, int month, int day, double fra
     return jdn + frac_day - 0.5;
 }
 
-inline double julian_date_from_doy(int year, int doy, double frac_day) {
+/// Convert a year and day-of-year to a Julian Date.
+///
+/// Returns `std::nullopt` when `doy` is outside the valid range for `year`.
+inline std::optional<double> julian_date_from_doy(int year, int doy, double frac_day) {
     int month, day;
-    bool ok = doy_to_month_day(year, doy, month, day);
-    assert(ok && "Day of year out of range");
+    if (!doy_to_month_day(year, doy, month, day)) {
+        return std::nullopt;
+    }
     return julian_date_from_calendar(year, month, day, frac_day);
 }
 

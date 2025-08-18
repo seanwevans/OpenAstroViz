@@ -14,6 +14,7 @@
 #include <cstdlib>
 #include <iomanip>
 #include <iostream>
+#include <optional>
 #include <string>
 
 #include "julian.hpp"
@@ -39,14 +40,18 @@ struct Orbit {
 };
 
 // --- very naïve checksum ignore ---
-static Orbit parse_tle(const Tle &tle) {
+static std::optional<Orbit> parse_tle(const Tle &tle) {
     Orbit o{};
     // Epoch (yyddd.dddddd)
     int yy = std::stoi(tle.line1.substr(18, 2));
     int doy = std::stoi(tle.line1.substr(20, 3));
     double frac_day = std::stod(tle.line1.substr(23, 8));
     int year = (yy < 57 ? 2000 + yy : 1900 + yy);
-    o.epoch_jd = julian::julian_date_from_doy(year, doy, frac_day);
+    auto jd = julian::julian_date_from_doy(year, doy, frac_day);
+    if (!jd) {
+        return std::nullopt;
+    }
+    o.epoch_jd = *jd;
 
     o.inc = deg2rad(std::stod(tle.line2.substr(8, 8)));
     o.raan = deg2rad(std::stod(tle.line2.substr(17, 8)));
@@ -109,7 +114,12 @@ int main() {
         return EXIT_FAILURE;
     }
 
-    Orbit orb = parse_tle(tle);
+    auto orbit_opt = parse_tle(tle);
+    if (!orbit_opt) {
+        std::cerr << "Invalid TLE epoch.\n";
+        return EXIT_FAILURE;
+    }
+    Orbit orb = *orbit_opt;
     double period = 2.0 * kPi / orb.mean_motion;
     double dt_step = 60.0; // seconds
     int steps = static_cast<int>(period / dt_step);

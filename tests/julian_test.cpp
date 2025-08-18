@@ -30,4 +30,5 @@ TEST_CASE("doy_to_month_day handles valid and invalid day-of-year inputs") {
         bool ok = julian::doy_to_month_day(2021, 366, month, day);
         REQUIRE_FALSE(ok);
     }
+
 }
