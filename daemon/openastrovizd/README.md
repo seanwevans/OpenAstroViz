@@ -22,6 +22,12 @@ The daemon provides a few subcommands:
 
 Running `openastrovizd` with no arguments prints the version.
 
+When the `start` subcommand is executed the daemon spawns a background
+process and writes its process ID to a file named `openastrovizd.pid` in the
+system temporary directory. The `status` subcommand reads this file and checks
+whether the recorded process is still alive, allowing the daemon to be
+monitored with simple status queries.
+
 ## Example usage
 
 ```bash

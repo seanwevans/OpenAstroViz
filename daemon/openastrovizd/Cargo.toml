@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
+libc = "0.2"
 
 [dev-dependencies]
 assert_cmd = "2"
