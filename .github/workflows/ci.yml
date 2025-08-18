@@ -31,22 +31,14 @@ jobs:
         run: npm install -g yarn
       - name: Install web dependencies
         run: yarn --cwd web install --frozen-lockfile
+      - name: Run web linter
+        run: yarn --cwd web lint
       - name: Build daemon
         run: cargo build -p openastrovizd --verbose
       - name: Run tests
         run: cargo test --workspace --verbose
       - name: Check Rust formatting
         run: cargo fmt --all -- --check
-      - name: Setup Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: 18
-      - name: Install web dependencies
-        run: npm install
-        working-directory: web
-      - name: Run web linter
-        run: npm run lint
-        working-directory: web
       - name: Check C/C++ formatting
         run: |
           clang-format --version
