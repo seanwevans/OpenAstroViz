@@ -10,4 +10,9 @@ openastrovizd status        # check if it is running
 openastrovizd bench <backend>  # benchmark a backend (e.g. cuda)
 ```
 
+Starting the daemon spawns a lightweight background process and writes its
+process ID to a file in the system temporary directory. Subsequent `status`
+checks read this file and verify that the process is still alive, providing a
+simple way to monitor the daemon.
+
 For detailed instructions and advanced options, see the [openastrovizd crate README](openastrovizd/README.md) or the project documentation.
