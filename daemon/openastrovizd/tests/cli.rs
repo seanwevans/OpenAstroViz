@@ -88,3 +88,35 @@ fn start_subcommand_outputs_message() {
         .stdout(contains("Daemon started"));
     cleanup();
 }
+
+#[test]
+fn stop_subcommand_stops_daemon_and_removes_pid() {
+    let _lock = TEST_MUTEX.lock().unwrap();
+    cleanup();
+    // Start the daemon first
+    Command::cargo_bin("openastrovizd")
+        .unwrap()
+        .arg("start")
+        .assert()
+        .success();
+    let pid_path = std::env::temp_dir().join("openastrovizd.pid");
+    assert!(pid_path.exists());
+
+    // Stop the daemon
+    Command::cargo_bin("openastrovizd")
+        .unwrap()
+        .arg("stop")
+        .assert()
+        .success()
+        .stdout(contains("Daemon stopped"));
+
+    // Status should report not running and PID file should be removed
+    Command::cargo_bin("openastrovizd")
+        .unwrap()
+        .arg("status")
+        .assert()
+        .success()
+        .stdout(contains("Daemon is not running"));
+    assert!(!pid_path.exists());
+    cleanup();
+}

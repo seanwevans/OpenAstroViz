@@ -62,6 +62,35 @@ pub fn check_status() -> Result<String, io::Error> {
     }
 }
 
+/// Stops the OpenAstroViz daemon by reading the PID file, sending a termination
+/// signal to the process and removing the PID file.
+pub fn stop_daemon() -> Result<String, io::Error> {
+    let pid_path = pid_file();
+    let pid_str = fs::read_to_string(&pid_path)?;
+    let pid: u32 = pid_str
+        .trim()
+        .parse()
+        .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "Invalid PID"))?;
+
+    #[cfg(unix)]
+    unsafe {
+        if libc::kill(pid as i32, libc::SIGTERM) != 0 {
+            return Err(io::Error::last_os_error());
+        }
+    }
+
+    #[cfg(not(unix))]
+    {
+        Command::new("taskkill")
+            .args(["/PID", &pid.to_string(), "/F"])
+            .status()
+            .map_err(|e| e)?;
+    }
+
+    fs::remove_file(pid_path)?;
+    Ok(String::from("Daemon stopped"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
