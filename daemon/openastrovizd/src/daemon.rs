@@ -15,6 +15,16 @@ fn pid_file() -> PathBuf {
 /// command can be set via `OPENASTROVIZD_DAEMON_ARG` (defaults to `60`).
 /// A PID file is written to the system temporary directory so that the daemon
 /// can later be queried.
+///
+/// # Examples
+/// ```no_run
+/// use openastrovizd::daemon::start_daemon;
+///
+/// # fn main() -> Result<(), std::io::Error> {
+/// start_daemon()?;
+/// # Ok(())
+/// # }
+/// ```
 pub fn start_daemon() -> Result<String, io::Error> {
     let cmd = env::var("OPENASTROVIZD_DAEMON_CMD").unwrap_or_else(|_| "sleep".to_string());
     let arg = env::var("OPENASTROVIZD_DAEMON_ARG").unwrap_or_else(|_| "60".to_string());
@@ -47,6 +57,18 @@ fn process_running(pid: u32) -> bool {
 
 /// Checks the status of the OpenAstroViz daemon by reading the PID file and
 /// verifying that the process is still alive.
+///
+/// # Examples
+/// ```no_run
+/// use openastrovizd::daemon::{start_daemon, check_status};
+///
+/// # fn main() -> Result<(), std::io::Error> {
+/// start_daemon()?;
+/// let status = check_status()?;
+/// println!("{status}");
+/// # Ok(())
+/// # }
+/// ```
 pub fn check_status() -> Result<String, io::Error> {
     match fs::read_to_string(pid_file()) {
         Ok(pid_str) => {
@@ -56,6 +78,42 @@ pub fn check_status() -> Result<String, io::Error> {
                 }
             }
             Ok(String::from("Daemon is not running"))
+        }
+        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(String::from("Daemon is not running")),
+        Err(e) => Err(e),
+    }
+}
+
+/// Stops the OpenAstroViz daemon by terminating the process recorded in the
+/// PID file and removing the file.
+///
+/// # Examples
+/// ```no_run
+/// use openastrovizd::daemon::{start_daemon, stop_daemon};
+///
+/// # fn main() -> Result<(), std::io::Error> {
+/// start_daemon()?;
+/// stop_daemon()?;
+/// # Ok(())
+/// # }
+/// ```
+pub fn stop_daemon() -> Result<String, io::Error> {
+    match fs::read_to_string(pid_file()) {
+        Ok(pid_str) => {
+            if let Ok(pid) = pid_str.trim().parse::<u32>() {
+                #[cfg(unix)]
+                unsafe {
+                    libc::kill(pid as i32, libc::SIGTERM);
+                }
+                #[cfg(not(unix))]
+                let _ = Command::new("taskkill")
+                    .args(["/PID", &pid.to_string(), "/F"])
+                    .status();
+                let _ = fs::remove_file(pid_file());
+                Ok(String::from("Daemon stopped"))
+            } else {
+                Ok(String::from("Daemon is not running"))
+            }
         }
         Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(String::from("Daemon is not running")),
         Err(e) => Err(e),
