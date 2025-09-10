@@ -63,54 +63,43 @@ pub fn check_status() -> Result<String, io::Error> {
 }
 
 #[cfg(test)]
+#[path = "../tests/util/mod.rs"]
+mod util;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use std::sync::Mutex;
 
-    static TEST_MUTEX: Mutex<()> = Mutex::new(());
+    use super::util;
 
-    fn cleanup() {
-        let pid_path = pid_file();
-        if let Ok(pid_str) = fs::read_to_string(&pid_path) {
-            if let Ok(pid) = pid_str.trim().parse::<i32>() {
-                #[cfg(unix)]
-                unsafe {
-                    libc::kill(pid, libc::SIGTERM);
-                }
-                #[cfg(not(unix))]
-                let _ = Command::new("taskkill")
-                    .args(["/PID", &pid.to_string(), "/F"])
-                    .status();
-            }
-        }
-        let _ = fs::remove_file(pid_path);
-    }
+    static TEST_MUTEX: Mutex<()> = Mutex::new(());
 
     #[test]
     fn start_and_status_success() {
         let _lock = TEST_MUTEX.lock().unwrap();
-        cleanup();
+        util::cleanup();
         let msg = start_daemon().expect("start failed");
         assert!(msg.contains("Daemon started"));
         let status = check_status().expect("status failed");
         assert!(status.contains("running"));
-        cleanup();
+        util::cleanup();
     }
 
     #[test]
     fn start_failure() {
         let _lock = TEST_MUTEX.lock().unwrap();
-        cleanup();
+        util::cleanup();
         env::set_var("OPENASTROVIZD_DAEMON_CMD", "/nonexistent");
         assert!(start_daemon().is_err());
         env::remove_var("OPENASTROVIZD_DAEMON_CMD");
-        cleanup();
+        util::cleanup();
     }
 
     #[test]
     fn status_not_running() {
         let _lock = TEST_MUTEX.lock().unwrap();
-        cleanup();
+        util::cleanup();
         let status = check_status().unwrap();
         assert!(status.contains("not running"));
     }
