@@ -88,3 +88,21 @@ fn start_subcommand_outputs_message() {
         .stdout(contains("Daemon started"));
     cleanup();
 }
+
+#[test]
+fn start_then_status_subcommand_reports_running() {
+    let _lock = TEST_MUTEX.lock().unwrap();
+    cleanup();
+    Command::cargo_bin("openastrovizd")
+        .unwrap()
+        .arg("start")
+        .assert()
+        .success();
+    Command::cargo_bin("openastrovizd")
+        .unwrap()
+        .arg("status")
+        .assert()
+        .success()
+        .stdout(contains("Daemon is running"));
+    cleanup();
+}

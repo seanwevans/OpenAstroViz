@@ -37,9 +37,17 @@ fn process_running(pid: u32) -> bool {
 
 #[cfg(not(unix))]
 fn process_running(pid: u32) -> bool {
-    if let Ok(out) = Command::new("tasklist").output() {
-        let list = String::from_utf8_lossy(&out.stdout);
-        list.contains(&pid.to_string())
+    let filter = format!("PID eq {pid}");
+    if let Ok(out) = Command::new("tasklist")
+        .args(["/FI", &filter, "/NH"])
+        .output()
+    {
+        if !out.status.success() {
+            return false;
+        }
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        let lines: Vec<_> = stdout.lines().filter(|l| !l.trim().is_empty()).collect();
+        lines.len() == 1 && lines[0].contains(&pid.to_string())
     } else {
         false
     }
