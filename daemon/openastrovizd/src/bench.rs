@@ -1,3 +1,4 @@
+use std::hint::black_box;
 use std::time::{Duration, Instant};
 
 use crate::backend::Backend;
@@ -29,7 +30,7 @@ pub fn bench_backend(backend: Backend) -> Result<Duration, BenchError> {
             }
             let elapsed = start.elapsed();
             // use sum so optimizer doesn't remove loop
-            let _ = sum;
+            black_box(sum);
             Ok(elapsed)
         }
     }
