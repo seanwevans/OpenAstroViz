@@ -17,6 +17,8 @@ struct Cli {
 enum Commands {
     /// Start the daemon
     Start,
+    /// Stop the daemon
+    Stop,
     /// Show daemon status
     Status,
     /// Run benchmarks for a backend
@@ -37,6 +39,13 @@ fn main() {
                 std::process::exit(1);
             }
         },
+        Some(Commands::Stop) => match daemon::stop_daemon() {
+            Ok(message) => println!("{message}"),
+            Err(e) => {
+                eprintln!("Failed to stop daemon: {e}");
+                std::process::exit(1);
+            }
+        },
         Some(Commands::Status) => match daemon::check_status() {
             Ok(status) => println!("{status}"),
             Err(e) => {
@@ -44,21 +53,19 @@ fn main() {
                 std::process::exit(1);
             }
         },
-        Some(Commands::Bench { backend }) => {
-            match bench_backend(backend) {
-                Ok(duration) => {
-                    println!("Benchmark for {backend:?} completed in {:?}", duration);
-                }
-                Err(BenchError::Unsupported) => {
-                    eprintln!("Backend {backend:?} is unsupported");
-                    std::process::exit(1);
-                }
-                Err(BenchError::Failed) => {
-                    eprintln!("Benchmark for {backend:?} failed");
-                    std::process::exit(1);
-                }
+        Some(Commands::Bench { backend }) => match bench_backend(backend) {
+            Ok(duration) => {
+                println!("Benchmark for {backend:?} completed in {:?}", duration);
             }
-        }
+            Err(BenchError::Unsupported) => {
+                eprintln!("Backend {backend:?} is unsupported");
+                std::process::exit(1);
+            }
+            Err(BenchError::Failed) => {
+                eprintln!("Benchmark for {backend:?} failed");
+                std::process::exit(1);
+            }
+        },
         None => {
             println!("openastrovizd {}", env!("CARGO_PKG_VERSION"));
         }

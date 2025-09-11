@@ -92,23 +92,47 @@ pub fn check_status() -> Result<String, io::Error> {
     }
 }
 
-/// Stops the OpenAstroViz daemon by terminating the process recorded in the
-/// PID file and removing the file.
-///
-/// # Examples
-/// ```no_run
-/// use openastrovizd::daemon::{start_daemon, stop_daemon};
-///
-/// # fn main() -> Result<(), std::io::Error> {
-/// start_daemon()?;
-/// stop_daemon()?;
-/// # Ok(())
-/// # }
-/// ```
+/// Stops the OpenAstroViz daemon by reading the PID file, sending a termination
+/// signal to the process and removing the PID file.
 pub fn stop_daemon() -> Result<String, io::Error> {
-    match fs::read_to_string(pid_file()) {
-        Ok(pid_str) => {
-            if let Ok(pid) = pid_str.trim().parse::<u32>() {
+    let pid_path = pid_file();
+    let pid_str = fs::read_to_string(&pid_path)?;
+    let pid: u32 = pid_str
+        .trim()
+        .parse()
+        .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "Invalid PID"))?;
+
+    #[cfg(unix)]
+    unsafe {
+        if libc::kill(pid as i32, libc::SIGTERM) != 0 {
+            return Err(io::Error::last_os_error());
+        }
+    }
+
+    #[cfg(not(unix))]
+    {
+        Command::new("taskkill")
+            .args(["/PID", &pid.to_string(), "/F"])
+            .status()
+            .map_err(|e| e)?;
+    }
+
+    fs::remove_file(pid_path)?;
+    Ok(String::from("Daemon stopped"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Mutex;
+
+    static TEST_MUTEX: Mutex<()> = Mutex::new(());
+
+    fn cleanup() {
+        let pid_path = pid_file();
+        if let Ok(pid_str) = fs::read_to_string(&pid_path) {
+            if let Ok(pid) = pid_str.trim().parse::<i32>() {
+
                 #[cfg(unix)]
                 unsafe {
                     libc::kill(pid as i32, libc::SIGTERM);
