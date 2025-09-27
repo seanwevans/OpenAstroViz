@@ -145,7 +145,13 @@ pub fn check_status() -> Result<String, io::Error> {
 /// signal to the process and removing the PID file.
 pub fn stop_daemon() -> Result<String, io::Error> {
     let pid_path = pid_file();
-    let pid_str = fs::read_to_string(&pid_path)?;
+    let pid_str = match fs::read_to_string(&pid_path) {
+        Ok(contents) => contents,
+        Err(e) if e.kind() == io::ErrorKind::NotFound => {
+            return Ok(String::from("Daemon is not running"));
+        }
+        Err(e) => return Err(e),
+    };
     let pid: u32 = pid_str
         .trim()
         .parse()
@@ -218,6 +224,14 @@ mod tests {
         assert!(status.contains("not running"));
     }
 
+    #[test]
+    fn stop_without_pid_file_returns_not_running() {
+        let _lock = TEST_MUTEX.lock().unwrap();
+        util::cleanup();
+        let result = stop_daemon();
+        assert!(matches!(result, Ok(ref msg) if msg == "Daemon is not running"));
+    }
+  
     #[cfg(unix)]
     #[test]
     fn process_running_treats_eperm_as_running() {

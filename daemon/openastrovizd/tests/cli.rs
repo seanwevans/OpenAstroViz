@@ -3,8 +3,7 @@ use predicates::prelude::*;
 use predicates::str::contains;
 use std::sync::Mutex;
 
-use util::cleanup;
-
+use crate::util::cleanup;
 static TEST_MUTEX: Mutex<()> = Mutex::new(());
 
 mod util;
