@@ -159,21 +159,6 @@ pub fn stop_daemon() -> Result<String, io::Error> {
     Ok(String::from("Daemon stopped"))
 }
 
-#[cfg(not(unix))]
-fn run_taskkill(pid: u32) -> io::Result<std::process::ExitStatus> {
-    #[cfg(all(test, windows))]
-    {
-        if let Some(result) = take_mock_taskkill_status() {
-            return result;
-        }
-    }
-
-    Command::new("taskkill")
-        .args(["/PID", &pid.to_string(), "/F"])
-        .status()
-}
-
-
 #[cfg(test)]
 #[path = "../tests/util/mod.rs"]
 mod util;
