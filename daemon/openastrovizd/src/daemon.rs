@@ -26,6 +26,23 @@ fn pid_file() -> PathBuf {
 /// # }
 /// ```
 pub fn start_daemon() -> Result<String, io::Error> {
+    let pid_path = pid_file();
+    match fs::read_to_string(&pid_path) {
+        Ok(pid_str) => {
+            if let Ok(pid) = pid_str.trim().parse::<u32>() {
+                if process_running(pid) {
+                    return Err(io::Error::new(
+                        io::ErrorKind::AlreadyExists,
+                        format!("Daemon already running with pid {pid}"),
+                    ));
+                }
+            }
+            let _ = fs::remove_file(&pid_path);
+        }
+        Err(e) if e.kind() == io::ErrorKind::NotFound => {}
+        Err(e) => return Err(e),
+    }
+
     let cmd = env::var("OPENASTROVIZD_DAEMON_CMD").unwrap_or_else(|_| "sleep".to_string());
     let arg = env::var("OPENASTROVIZD_DAEMON_ARG").unwrap_or_else(|_| "60".to_string());
 
@@ -35,7 +52,7 @@ pub fn start_daemon() -> Result<String, io::Error> {
         .stderr(Stdio::null())
         .spawn()?;
     let pid = child.id();
-    fs::write(pid_file(), pid.to_string())?;
+    fs::write(&pid_path, pid.to_string())?;
 
     Ok(format!("Daemon started with pid {pid}"))
 }
@@ -122,37 +139,6 @@ pub fn stop_daemon() -> Result<String, io::Error> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use std::sync::Mutex;
-
-    static TEST_MUTEX: Mutex<()> = Mutex::new(());
-
-    fn cleanup() {
-        let pid_path = pid_file();
-        if let Ok(pid_str) = fs::read_to_string(&pid_path) {
-            if let Ok(pid) = pid_str.trim().parse::<i32>() {
-
-                #[cfg(unix)]
-                unsafe {
-                    libc::kill(pid as i32, libc::SIGTERM);
-                }
-                #[cfg(not(unix))]
-                let _ = Command::new("taskkill")
-                    .args(["/PID", &pid.to_string(), "/F"])
-                    .status();
-                let _ = fs::remove_file(pid_file());
-                Ok(String::from("Daemon stopped"))
-            } else {
-                Ok(String::from("Daemon is not running"))
-            }
-        }
-        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(String::from("Daemon is not running")),
-        Err(e) => Err(e),
-    }
-}
-
-#[cfg(test)]
 #[path = "../tests/util/mod.rs"]
 mod util;
 
@@ -160,7 +146,6 @@ mod util;
 mod tests {
     use super::*;
     use std::sync::Mutex;
-
     use super::util;
 
     static TEST_MUTEX: Mutex<()> = Mutex::new(());
@@ -192,5 +177,34 @@ mod tests {
         util::cleanup();
         let status = check_status().unwrap();
         assert!(status.contains("not running"));
+    }
+
+    #[test]
+    fn start_rejects_running_daemon_and_cleans_stale_pid() {
+        let _lock = TEST_MUTEX.lock().unwrap();
+        util::cleanup();
+
+        let pid_path = pid_file();
+
+        let first_msg = start_daemon().expect("first start failed");
+        assert!(first_msg.contains("Daemon started"));
+
+        let second_attempt = start_daemon();
+        assert!(second_attempt.is_err());
+        let err = second_attempt.unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::AlreadyExists);
+
+        util::cleanup();
+
+        let stale_pid = 999_999u32.to_string();
+        fs::write(&pid_path, &stale_pid).expect("should write stale pid file");
+        assert!(pid_path.exists(), "pid file should exist before restart");
+
+        let restart_msg = start_daemon().expect("restart should succeed after stale pid");
+        assert!(restart_msg.contains("Daemon started"));
+        let new_pid_str = fs::read_to_string(&pid_path).expect("pid file should exist after restart");
+        assert_ne!(stale_pid, new_pid_str.trim());
+
+        util::cleanup();
     }
 }
