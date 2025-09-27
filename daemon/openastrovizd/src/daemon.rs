@@ -41,8 +41,26 @@ pub fn start_daemon() -> Result<String, io::Error> {
 }
 
 #[cfg(unix)]
+fn kill_result_indicates_running(kill_result: i32, errno: i32) -> bool {
+    if kill_result == 0 {
+        true
+    } else if kill_result == -1 && errno == libc::EPERM {
+        true
+    } else {
+        false
+    }
+}
+
+#[cfg(unix)]
 fn process_running(pid: u32) -> bool {
-    unsafe { libc::kill(pid as i32, 0) == 0 }
+    unsafe {
+        let result = libc::kill(pid as i32, 0);
+        let errno = if result == 0 { 0 } else { *libc::__errno_location() };
+        if result == -1 && errno == libc::ESRCH {
+            return false;
+        }
+        kill_result_indicates_running(result, errno)
+    }
 }
 
 #[cfg(not(unix))]
@@ -122,37 +140,6 @@ pub fn stop_daemon() -> Result<String, io::Error> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use std::sync::Mutex;
-
-    static TEST_MUTEX: Mutex<()> = Mutex::new(());
-
-    fn cleanup() {
-        let pid_path = pid_file();
-        if let Ok(pid_str) = fs::read_to_string(&pid_path) {
-            if let Ok(pid) = pid_str.trim().parse::<i32>() {
-
-                #[cfg(unix)]
-                unsafe {
-                    libc::kill(pid as i32, libc::SIGTERM);
-                }
-                #[cfg(not(unix))]
-                let _ = Command::new("taskkill")
-                    .args(["/PID", &pid.to_string(), "/F"])
-                    .status();
-                let _ = fs::remove_file(pid_file());
-                Ok(String::from("Daemon stopped"))
-            } else {
-                Ok(String::from("Daemon is not running"))
-            }
-        }
-        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(String::from("Daemon is not running")),
-        Err(e) => Err(e),
-    }
-}
-
-#[cfg(test)]
 #[path = "../tests/util/mod.rs"]
 mod util;
 
@@ -192,5 +179,12 @@ mod tests {
         util::cleanup();
         let status = check_status().unwrap();
         assert!(status.contains("not running"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn process_running_treats_eperm_as_running() {
+        assert!(kill_result_indicates_running(-1, libc::EPERM));
+        assert!(!kill_result_indicates_running(-1, libc::ESRCH));
     }
 }
