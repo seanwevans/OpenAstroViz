@@ -72,8 +72,26 @@ pub fn start_daemon() -> Result<String, io::Error> {
 }
 
 #[cfg(unix)]
+fn kill_result_indicates_running(kill_result: i32, errno: i32) -> bool {
+    if kill_result == 0 {
+        true
+    } else if kill_result == -1 && errno == libc::EPERM {
+        true
+    } else {
+        false
+    }
+}
+
+#[cfg(unix)]
 fn process_running(pid: u32) -> bool {
-    unsafe { libc::kill(pid as i32, 0) == 0 }
+    unsafe {
+        let result = libc::kill(pid as i32, 0);
+        let errno = if result == 0 { 0 } else { *libc::__errno_location() };
+        if result == -1 && errno == libc::ESRCH {
+            return false;
+        }
+        kill_result_indicates_running(result, errno)
+    }
 }
 
 #[cfg(not(unix))]
@@ -200,7 +218,13 @@ mod tests {
         assert!(status.contains("not running"));
     }
 
-
+    #[cfg(unix)]
+    #[test]
+    fn process_running_treats_eperm_as_running() {
+        assert!(kill_result_indicates_running(-1, libc::EPERM));
+        assert!(!kill_result_indicates_running(-1, libc::ESRCH));
+    }
+  
     #[cfg(windows)]
     #[test]
     fn stop_daemon_returns_error_on_taskkill_failure() {
@@ -218,7 +242,8 @@ mod tests {
         assert!(pid_path.exists());
 
         let _ = std::fs::remove_file(pid_path);
-
+    }
+  
     #[test]
     fn start_rejects_running_daemon_and_cleans_stale_pid() {
         let _lock = TEST_MUTEX.lock().unwrap();
