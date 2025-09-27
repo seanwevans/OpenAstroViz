@@ -122,37 +122,6 @@ pub fn stop_daemon() -> Result<String, io::Error> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use std::sync::Mutex;
-
-    static TEST_MUTEX: Mutex<()> = Mutex::new(());
-
-    fn cleanup() {
-        let pid_path = pid_file();
-        if let Ok(pid_str) = fs::read_to_string(&pid_path) {
-            if let Ok(pid) = pid_str.trim().parse::<i32>() {
-
-                #[cfg(unix)]
-                unsafe {
-                    libc::kill(pid as i32, libc::SIGTERM);
-                }
-                #[cfg(not(unix))]
-                let _ = Command::new("taskkill")
-                    .args(["/PID", &pid.to_string(), "/F"])
-                    .status();
-                let _ = fs::remove_file(pid_file());
-                Ok(String::from("Daemon stopped"))
-            } else {
-                Ok(String::from("Daemon is not running"))
-            }
-        }
-        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(String::from("Daemon is not running")),
-        Err(e) => Err(e),
-    }
-}
-
-#[cfg(test)]
 #[path = "../tests/util/mod.rs"]
 mod util;
 

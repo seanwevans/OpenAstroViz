@@ -6,6 +6,7 @@ use std::sync::Mutex;
 static TEST_MUTEX: Mutex<()> = Mutex::new(());
 
 mod util;
+use util::cleanup;
 
 #[test]
 fn runs_without_args_shows_version() {
@@ -18,7 +19,7 @@ fn runs_without_args_shows_version() {
 #[test]
 fn status_subcommand() {
     let _lock = TEST_MUTEX.lock().unwrap();
-    util::cleanup();
+    cleanup();
     let mut cmd = Command::cargo_bin("openastrovizd").unwrap();
     cmd.arg("status")
         .assert()
@@ -61,14 +62,14 @@ fn help_includes_description() {
 #[test]
 fn start_subcommand_outputs_message() {
     let _lock = TEST_MUTEX.lock().unwrap();
-    util::cleanup();
+    cleanup();
     Command::cargo_bin("openastrovizd")
         .unwrap()
         .arg("start")
         .assert()
         .success()
         .stdout(contains("Daemon started"));
-    util::cleanup();
+    cleanup();
 }
 
 #[test]
