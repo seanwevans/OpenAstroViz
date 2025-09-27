@@ -96,7 +96,13 @@ pub fn check_status() -> Result<String, io::Error> {
 /// signal to the process and removing the PID file.
 pub fn stop_daemon() -> Result<String, io::Error> {
     let pid_path = pid_file();
-    let pid_str = fs::read_to_string(&pid_path)?;
+    let pid_str = match fs::read_to_string(&pid_path) {
+        Ok(contents) => contents,
+        Err(e) if e.kind() == io::ErrorKind::NotFound => {
+            return Ok(String::from("Daemon is not running"));
+        }
+        Err(e) => return Err(e),
+    };
     let pid: u32 = pid_str
         .trim()
         .parse()
@@ -119,37 +125,6 @@ pub fn stop_daemon() -> Result<String, io::Error> {
 
     fs::remove_file(pid_path)?;
     Ok(String::from("Daemon stopped"))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::sync::Mutex;
-
-    static TEST_MUTEX: Mutex<()> = Mutex::new(());
-
-    fn cleanup() {
-        let pid_path = pid_file();
-        if let Ok(pid_str) = fs::read_to_string(&pid_path) {
-            if let Ok(pid) = pid_str.trim().parse::<i32>() {
-
-                #[cfg(unix)]
-                unsafe {
-                    libc::kill(pid as i32, libc::SIGTERM);
-                }
-                #[cfg(not(unix))]
-                let _ = Command::new("taskkill")
-                    .args(["/PID", &pid.to_string(), "/F"])
-                    .status();
-                let _ = fs::remove_file(pid_file());
-                Ok(String::from("Daemon stopped"))
-            } else {
-                Ok(String::from("Daemon is not running"))
-            }
-        }
-        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(String::from("Daemon is not running")),
-        Err(e) => Err(e),
-    }
 }
 
 #[cfg(test)]
@@ -192,5 +167,13 @@ mod tests {
         util::cleanup();
         let status = check_status().unwrap();
         assert!(status.contains("not running"));
+    }
+
+    #[test]
+    fn stop_without_pid_file_returns_not_running() {
+        let _lock = TEST_MUTEX.lock().unwrap();
+        util::cleanup();
+        let result = stop_daemon();
+        assert!(matches!(result, Ok(ref msg) if msg == "Daemon is not running"));
     }
 }
