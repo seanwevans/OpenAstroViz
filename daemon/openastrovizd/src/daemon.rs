@@ -4,6 +4,20 @@ use std::io;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 
+#[cfg(all(test, windows))]
+static TASKKILL_STATUS: std::sync::Mutex<Option<io::Result<std::process::ExitStatus>>> =
+    std::sync::Mutex::new(None);
+
+#[cfg(all(test, windows))]
+fn take_mock_taskkill_status() -> Option<io::Result<std::process::ExitStatus>> {
+    TASKKILL_STATUS.lock().unwrap().take()
+}
+
+#[cfg(all(test, windows))]
+pub(crate) fn set_mock_taskkill_status(result: io::Result<std::process::ExitStatus>) {
+    *TASKKILL_STATUS.lock().unwrap() = Some(result);
+}
+
 fn pid_file() -> PathBuf {
     env::temp_dir().join("openastrovizd.pid")
 }
@@ -26,6 +40,23 @@ fn pid_file() -> PathBuf {
 /// # }
 /// ```
 pub fn start_daemon() -> Result<String, io::Error> {
+    let pid_path = pid_file();
+    match fs::read_to_string(&pid_path) {
+        Ok(pid_str) => {
+            if let Ok(pid) = pid_str.trim().parse::<u32>() {
+                if process_running(pid) {
+                    return Err(io::Error::new(
+                        io::ErrorKind::AlreadyExists,
+                        format!("Daemon already running with pid {pid}"),
+                    ));
+                }
+            }
+            let _ = fs::remove_file(&pid_path);
+        }
+        Err(e) if e.kind() == io::ErrorKind::NotFound => {}
+        Err(e) => return Err(e),
+    }
+
     let cmd = env::var("OPENASTROVIZD_DAEMON_CMD").unwrap_or_else(|_| "sleep".to_string());
     let arg = env::var("OPENASTROVIZD_DAEMON_ARG").unwrap_or_else(|_| "60".to_string());
 
@@ -35,7 +66,7 @@ pub fn start_daemon() -> Result<String, io::Error> {
         .stderr(Stdio::null())
         .spawn()?;
     let pid = child.id();
-    fs::write(pid_file(), pid.to_string())?;
+    fs::write(&pid_path, pid.to_string())?;
 
     Ok(format!("Daemon started with pid {pid}"))
 }
@@ -111,10 +142,17 @@ pub fn stop_daemon() -> Result<String, io::Error> {
 
     #[cfg(not(unix))]
     {
-        Command::new("taskkill")
-            .args(["/PID", &pid.to_string(), "/F"])
-            .status()
-            .map_err(|e| e)?;
+        let status = run_taskkill(pid)?;
+        if !status.success() {
+            let code = status
+                .code()
+                .map(|c| c.to_string())
+                .unwrap_or_else(|| String::from("unknown"));
+            return Err(io::Error::new(
+                io::ErrorKind::Other,
+                format!("taskkill exited with unsuccessful status code {code}"),
+            ));
+        }
     }
 
     fs::remove_file(pid_path)?;
@@ -129,7 +167,6 @@ mod util;
 mod tests {
     use super::*;
     use std::sync::Mutex;
-
     use super::util;
 
     static TEST_MUTEX: Mutex<()> = Mutex::new(());
@@ -161,5 +198,53 @@ mod tests {
         util::cleanup();
         let status = check_status().unwrap();
         assert!(status.contains("not running"));
+    }
+
+
+    #[cfg(windows)]
+    #[test]
+    fn stop_daemon_returns_error_on_taskkill_failure() {
+        use std::os::windows::process::ExitStatusExt;
+
+        let _lock = TEST_MUTEX.lock().unwrap();
+        let pid_path = pid_file();
+        let _ = std::fs::remove_file(&pid_path);
+        std::fs::write(&pid_path, "4242").unwrap();
+
+        super::set_mock_taskkill_status(Ok(std::process::ExitStatus::from_raw(1)));
+
+        let err = stop_daemon().expect_err("expected taskkill failure to propagate");
+        assert_eq!(err.kind(), io::ErrorKind::Other);
+        assert!(pid_path.exists());
+
+        let _ = std::fs::remove_file(pid_path);
+
+    #[test]
+    fn start_rejects_running_daemon_and_cleans_stale_pid() {
+        let _lock = TEST_MUTEX.lock().unwrap();
+        util::cleanup();
+
+        let pid_path = pid_file();
+
+        let first_msg = start_daemon().expect("first start failed");
+        assert!(first_msg.contains("Daemon started"));
+
+        let second_attempt = start_daemon();
+        assert!(second_attempt.is_err());
+        let err = second_attempt.unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::AlreadyExists);
+
+        util::cleanup();
+
+        let stale_pid = 999_999u32.to_string();
+        fs::write(&pid_path, &stale_pid).expect("should write stale pid file");
+        assert!(pid_path.exists(), "pid file should exist before restart");
+
+        let restart_msg = start_daemon().expect("restart should succeed after stale pid");
+        assert!(restart_msg.contains("Daemon started"));
+        let new_pid_str = fs::read_to_string(&pid_path).expect("pid file should exist after restart");
+        assert_ne!(stale_pid, new_pid_str.trim());
+
+        util::cleanup();
     }
 }
