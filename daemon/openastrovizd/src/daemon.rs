@@ -4,6 +4,20 @@ use std::io;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 
+#[cfg(all(test, windows))]
+static TASKKILL_STATUS: std::sync::Mutex<Option<io::Result<std::process::ExitStatus>>> =
+    std::sync::Mutex::new(None);
+
+#[cfg(all(test, windows))]
+fn take_mock_taskkill_status() -> Option<io::Result<std::process::ExitStatus>> {
+    TASKKILL_STATUS.lock().unwrap().take()
+}
+
+#[cfg(all(test, windows))]
+pub(crate) fn set_mock_taskkill_status(result: io::Result<std::process::ExitStatus>) {
+    *TASKKILL_STATUS.lock().unwrap() = Some(result);
+}
+
 fn pid_file() -> PathBuf {
     env::temp_dir().join("openastrovizd.pid")
 }
@@ -111,45 +125,35 @@ pub fn stop_daemon() -> Result<String, io::Error> {
 
     #[cfg(not(unix))]
     {
-        Command::new("taskkill")
-            .args(["/PID", &pid.to_string(), "/F"])
-            .status()
-            .map_err(|e| e)?;
+        let status = run_taskkill(pid)?;
+        if !status.success() {
+            let code = status
+                .code()
+                .map(|c| c.to_string())
+                .unwrap_or_else(|| String::from("unknown"));
+            return Err(io::Error::new(
+                io::ErrorKind::Other,
+                format!("taskkill exited with unsuccessful status code {code}"),
+            ));
+        }
     }
 
     fs::remove_file(pid_path)?;
     Ok(String::from("Daemon stopped"))
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::sync::Mutex;
-
-    static TEST_MUTEX: Mutex<()> = Mutex::new(());
-
-    fn cleanup() {
-        let pid_path = pid_file();
-        if let Ok(pid_str) = fs::read_to_string(&pid_path) {
-            if let Ok(pid) = pid_str.trim().parse::<i32>() {
-
-                #[cfg(unix)]
-                unsafe {
-                    libc::kill(pid as i32, libc::SIGTERM);
-                }
-                #[cfg(not(unix))]
-                let _ = Command::new("taskkill")
-                    .args(["/PID", &pid.to_string(), "/F"])
-                    .status();
-                let _ = fs::remove_file(pid_file());
-                Ok(String::from("Daemon stopped"))
-            } else {
-                Ok(String::from("Daemon is not running"))
-            }
+#[cfg(not(unix))]
+fn run_taskkill(pid: u32) -> io::Result<std::process::ExitStatus> {
+    #[cfg(all(test, windows))]
+    {
+        if let Some(result) = take_mock_taskkill_status() {
+            return result;
         }
-        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(String::from("Daemon is not running")),
-        Err(e) => Err(e),
     }
+
+    Command::new("taskkill")
+        .args(["/PID", &pid.to_string(), "/F"])
+        .status()
 }
 
 #[cfg(test)]
@@ -192,5 +196,24 @@ mod tests {
         util::cleanup();
         let status = check_status().unwrap();
         assert!(status.contains("not running"));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn stop_daemon_returns_error_on_taskkill_failure() {
+        use std::os::windows::process::ExitStatusExt;
+
+        let _lock = TEST_MUTEX.lock().unwrap();
+        let pid_path = pid_file();
+        let _ = std::fs::remove_file(&pid_path);
+        std::fs::write(&pid_path, "4242").unwrap();
+
+        super::set_mock_taskkill_status(Ok(std::process::ExitStatus::from_raw(1)));
+
+        let err = stop_daemon().expect_err("expected taskkill failure to propagate");
+        assert_eq!(err.kind(), io::ErrorKind::Other);
+        assert!(pid_path.exists());
+
+        let _ = std::fs::remove_file(pid_path);
     }
 }
