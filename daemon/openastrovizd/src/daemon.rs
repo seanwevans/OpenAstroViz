@@ -86,7 +86,11 @@ fn kill_result_indicates_running(kill_result: i32, errno: i32) -> bool {
 fn process_running(pid: u32) -> bool {
     unsafe {
         let result = libc::kill(pid as i32, 0);
-        let errno = if result == 0 { 0 } else { *libc::__errno_location() };
+        let errno = if result == 0 {
+            0
+        } else {
+            *libc::__errno_location()
+        };
         if result == -1 && errno == libc::ESRCH {
             return false;
         }
@@ -189,9 +193,9 @@ mod util;
 
 #[cfg(test)]
 mod tests {
+    use super::util;
     use super::*;
     use std::sync::Mutex;
-    use super::util;
 
     static TEST_MUTEX: Mutex<()> = Mutex::new(());
 
@@ -231,14 +235,14 @@ mod tests {
         let result = stop_daemon();
         assert!(matches!(result, Ok(ref msg) if msg == "Daemon is not running"));
     }
-  
+
     #[cfg(unix)]
     #[test]
     fn process_running_treats_eperm_as_running() {
         assert!(kill_result_indicates_running(-1, libc::EPERM));
         assert!(!kill_result_indicates_running(-1, libc::ESRCH));
     }
-  
+
     #[cfg(windows)]
     #[test]
     fn stop_daemon_returns_error_on_taskkill_failure() {
@@ -257,7 +261,7 @@ mod tests {
 
         let _ = std::fs::remove_file(pid_path);
     }
-  
+
     #[test]
     fn start_rejects_running_daemon_and_cleans_stale_pid() {
         let _lock = TEST_MUTEX.lock().unwrap();
@@ -281,7 +285,8 @@ mod tests {
 
         let restart_msg = start_daemon().expect("restart should succeed after stale pid");
         assert!(restart_msg.contains("Daemon started"));
-        let new_pid_str = fs::read_to_string(&pid_path).expect("pid file should exist after restart");
+        let new_pid_str =
+            fs::read_to_string(&pid_path).expect("pid file should exist after restart");
         assert_ne!(stale_pid, new_pid_str.trim());
 
         util::cleanup();

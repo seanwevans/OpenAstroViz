@@ -1,6 +1,6 @@
+#include "julian.hpp"
 #include <catch2/catch_all.hpp>
 #include <cmath>
-#include "julian.hpp"
 
 TEST_CASE("julian_date_from_doy computes expected Julian dates") {
     auto jd1 = julian::julian_date_from_doy(2000, 1, 0.5);
@@ -34,5 +34,4 @@ TEST_CASE("doy_to_month_day handles valid and invalid day-of-year inputs") {
         bool ok = julian::doy_to_month_day(2021, 366, month, day);
         REQUIRE_FALSE(ok);
     }
-
 }

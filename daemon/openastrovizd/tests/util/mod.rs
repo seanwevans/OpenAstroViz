@@ -19,4 +19,3 @@ pub fn cleanup() {
     }
     let _ = fs::remove_file(pid_path);
 }
-
