@@ -1,4 +1,5 @@
 # OpenAstroViz
+<img width="256" alt="LASERS!" src="https://github.com/user-attachments/assets/e6491b05-be89-4c3f-a6ac-fc103126ffc8" />
 
 **FlightRadar24 for space – but fully open‑source and physics‑grade accurate.**
 OpenAstroViz streams, propagates, and visualises **every tracked object in Earth orbit** – satellites, spent stages, debris – in real time.
