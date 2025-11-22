@@ -18,6 +18,7 @@ The daemon provides a few subcommands:
 
 - `start` – launch the background service
 - `status` – query whether the service is running
+- `stop` – terminate the running daemon and clean up the PID file
 - `bench <backend>` – run performance benchmarks for a backend (e.g. `cuda`)
 
 Running `openastrovizd` with no arguments prints the version.
@@ -26,13 +27,15 @@ When the `start` subcommand is executed the daemon spawns a background
 process and writes its process ID to a file named `openastrovizd.pid` in the
 system temporary directory. The `status` subcommand reads this file and checks
 whether the recorded process is still alive, allowing the daemon to be
-monitored with simple status queries.
+monitored with simple status queries. The `stop` subcommand terminates the
+running daemon and removes the PID file to prevent stale state.
 
 ## Example usage
 
 ```bash
 $ cargo run -p openastrovizd -- start      # start the daemon
 $ cargo run -p openastrovizd -- status     # check if it's alive
+$ cargo run -p openastrovizd -- stop       # terminate the daemon and remove the PID file
 $ cargo run -p openastrovizd -- bench cuda # benchmark the CUDA backend
 ```
 
