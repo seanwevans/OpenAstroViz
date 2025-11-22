@@ -4,6 +4,7 @@ use std::io;
 use std::net::TcpStream;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
+use std::thread;
 use std::time::{Duration, Instant};
 
 #[cfg(all(test, windows))]
@@ -193,7 +194,8 @@ fn process_running(pid: u32) -> bool {
         if result == -1 && errno == libc::ESRCH {
             return false;
         }
-        kill_result_indicates_running(result, errno)
+        let running = kill_result_indicates_running(result, errno);
+        running && !is_zombie(pid)
     }
 }
 
@@ -263,6 +265,15 @@ fn socket_ready(target: &str) -> bool {
     } else {
         Path::new(target).exists()
     }
+#[cfg(unix)]
+fn is_zombie(pid: u32) -> bool {
+    let stat_path = format!("/proc/{pid}/stat");
+    if let Ok(contents) = fs::read_to_string(stat_path) {
+        if let Some(state) = contents.split_whitespace().nth(2) {
+            return state == "Z";
+        }
+    }
+    false
 }
 
 #[cfg(not(unix))]
@@ -350,8 +361,35 @@ pub fn stop_daemon() -> Result<String, io::Error> {
         }
     }
 
-    fs::remove_file(pid_path)?;
-    Ok(String::from("Daemon stopped"))
+    let wait_timeout = Duration::from_secs(5);
+    let deadline = Instant::now() + wait_timeout;
+
+    let mut stopped = false;
+    loop {
+        if !process_running(pid) {
+            stopped = true;
+            break;
+        }
+
+        if Instant::now() >= deadline {
+            break;
+        }
+
+        thread::sleep(Duration::from_millis(100));
+    }
+
+    if stopped {
+        fs::remove_file(pid_path)?;
+        Ok(String::from("Daemon stopped"))
+    } else {
+        Err(io::Error::new(
+            io::ErrorKind::Other,
+            format!(
+                "Daemon with pid {pid} did not stop within {:?}; pid file left intact",
+                wait_timeout
+            ),
+        ))
+    }
 }
 
 #[cfg(test)]

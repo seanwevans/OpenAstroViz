@@ -1,0 +1,15 @@
+[package]
+name = "openastroviz-core"
+version = "0.1.0"
+edition = "2021"
+description = "OpenAstroViz orbital mechanics core, including Vallado SGP4 propagation"
+authors = ["OpenAstroViz Contributors"]
+license = "MIT"
+
+[dependencies]
+sgp4 = "2.3.0"
+thiserror = "1"
+
+[dev-dependencies]
+approx = "0.5"
+chrono = { version = "0.4", default-features = false, features = ["clock"] }

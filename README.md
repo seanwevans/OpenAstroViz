@@ -32,13 +32,16 @@ $ rustup override set stable  # ensure the stable toolchain locally
 # 2 – build CUDA backend (requires NVIDIA + nvcc)
 $ cargo run -p openastrovizd -- bench cuda   # benchmarks, STK vector tests
 
+# 2b – run reference Vallado SGP4 sample (CPU)
+$ cargo run -p openastroviz-core --example propagate
+
 # 3 – run the web client (connects to local daemon)
 $ yarn --cwd web install && yarn --cwd web dev   # http://localhost:5173
 ```
 
 If you don’t have an NVIDIA GPU, skip `cuda/` and work on the **cpu‑simd** reference path or UI issues labelled *good first issue*.
 
-Note that the current repository only provides a **proof‑of‑concept** propagator.  Its results have significant accuracy limitations and are not suitable for operational use.  See [`poc_sgp.cpp`](poc_sgp.cpp) for implementation details and known issues.
+The validated Vallado SGP4 implementation now lives in the [`core/`](core) crate and is exercised by regression tests against published state vectors.  The earlier Keplerian proof‑of‑concept has been quarantined to [`docs/archive/poc_sgp.cpp`](docs/archive/poc_sgp.cpp) for historical reference.
 
 ---
 

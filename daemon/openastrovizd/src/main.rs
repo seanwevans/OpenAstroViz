@@ -71,8 +71,11 @@ fn main() {
             }
         },
         Some(Commands::Bench { backend }) => match bench_backend(backend) {
-            Ok(duration) => {
-                println!("Benchmark for {backend:?} completed in {:?}", duration);
+            Ok(outcome) => {
+                println!(
+                    "Benchmark for {backend:?} completed in {:?} with {} work units",
+                    outcome.duration, outcome.work_units
+                );
             }
             Err(BenchError::Unsupported) => {
                 eprintln!("Backend {backend:?} is unsupported");
