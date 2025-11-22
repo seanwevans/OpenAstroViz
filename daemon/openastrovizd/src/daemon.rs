@@ -156,6 +156,7 @@ pub fn start_daemon() -> Result<String, io::Error> {
 
     match wait_for_readiness(&mut child, &config) {
         Ok(()) => {
+            forward_child_stderr(&mut child);
             let pid = child.id();
             fs::write(&pid_path, pid.to_string())?;
 
@@ -245,6 +246,14 @@ fn read_child_stderr(child: &mut Child) -> Option<String> {
     match io::Read::read_to_string(&mut stderr, &mut buf) {
         Ok(_) => Some(buf),
         Err(_) => None,
+    }
+}
+
+fn forward_child_stderr(child: &mut Child) {
+    if let Some(mut stderr) = child.stderr.take() {
+        std::thread::spawn(move || {
+            let _ = io::copy(&mut stderr, &mut io::stderr());
+        });
     }
 }
 
