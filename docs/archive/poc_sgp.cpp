@@ -1,4 +1,4 @@
-// poc_sgp4.cpp — minimal proof‑of‑concept for OpenAstroViz
+// ARCHIVED: poc_sgp4.cpp — minimal proof‑of‑concept for OpenAstroViz
 // MIT License © 2025 OpenAstroViz Contributors
 // -----------------------------------------------------------
 // This is NOT a production‑grade SGP4.  It is a stripped‑down
