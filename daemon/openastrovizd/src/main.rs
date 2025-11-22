@@ -1,4 +1,5 @@
 use clap::{Parser, Subcommand};
+use std::path::PathBuf;
 
 mod backend;
 mod bench;
@@ -9,6 +10,14 @@ use bench::{bench_backend, BenchError};
 #[derive(Parser)]
 #[command(author, version, about = "OpenAstroViz daemon")]
 struct Cli {
+    /// Path to a configuration file for the daemon.
+    #[arg(long, global = true)]
+    config: Option<PathBuf>,
+
+    /// Internal flag used to run the long-lived daemon service.
+    #[arg(long, hide = true)]
+    run_service: bool,
+
     #[command(subcommand)]
     command: Option<Commands>,
 }
@@ -30,6 +39,14 @@ enum Commands {
 
 fn main() {
     let cli = Cli::parse();
+
+    if cli.run_service {
+        if let Err(e) = daemon::run_service(cli.config.as_ref()) {
+            eprintln!("Failed to run daemon service: {e}");
+            std::process::exit(1);
+        }
+        return;
+    }
 
     match cli.command {
         Some(Commands::Start) => match daemon::start_daemon() {
