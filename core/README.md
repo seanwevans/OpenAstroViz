@@ -1,8 +1,8 @@
 # Core module
 
-The **core** crate will own OpenAstroViz's shared orbital mechanics logic. It
-will expose data types such as TLE parsing, time systems and coordinate
-transforms, and will host the physics models used by every backend.  A key
+The **core** crate owns OpenAstroViz's shared orbital mechanics logic. It
+exposes data types such as TLE parsing, time systems and coordinate
+transforms, and hosts the physics models used by every backend.  A key
 design decision is that all GPU‑accelerated kernels will live behind a
 `GpuBackend` trait so that either a CPU or CUDA implementation can satisfy the
 same API.  This principle is called out in the project
@@ -12,10 +12,14 @@ Both the `cpu/` and `cuda/` folders will depend on this crate.  `core` provides
 the algorithms and trait definitions while the backends provide concrete
 implementations optimised for their respective targets.
 
+Current responsibilities include:
+
+* **SGP4 propagator** – wraps the validated Vallado reference from the
+  [`sgp4`](https://crates.io/crates/sgp4) crate and is covered by regression
+  vectors in `core/tests/`.
+
 Planned responsibilities include:
 
-* **SGP4 propagator** – reference implementation used by tests and both
-  backends (see milestone *M1 – CUDA reference propagator* in the roadmap).
 * **Conjunction logic** – cell‑grid pruning and analytic miss‑distance solver
   (roadmap *M2*).
 * **Common math utilities** – vector types, frame conversions and helpers used
