@@ -12,7 +12,7 @@ pub enum BenchError {
     ///
     /// Currently supported backends are [`Backend::Cpu`] and [`Backend::Cuda`].
     Unsupported,
-/// The benchmark failed to execute.
+    /// The benchmark failed to execute.
     Failed,
 }
 
