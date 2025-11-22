@@ -1,8 +1,10 @@
 use std::env;
 use std::fs;
 use std::io;
-use std::path::PathBuf;
-use std::process::{Command, Stdio};
+use std::net::TcpStream;
+use std::path::{Path, PathBuf};
+use std::process::{Child, Command, Stdio};
+use std::time::{Duration, Instant};
 
 #[cfg(all(test, windows))]
 static TASKKILL_STATUS: std::sync::Mutex<Option<io::Result<std::process::ExitStatus>>> =
@@ -22,13 +24,100 @@ fn pid_file() -> PathBuf {
     env::temp_dir().join("openastrovizd.pid")
 }
 
+fn default_binary_path() -> io::Result<String> {
+    if let Ok(path) = env::var("CARGO_BIN_EXE_openastrovizd") {
+        return Ok(path);
+    }
+
+    let current = env::current_exe()?;
+    if let Some(parent) = current.parent() {
+        if parent.ends_with("deps") {
+            if let Some(bin_dir) = parent.parent() {
+                let mut candidate = bin_dir.join(binary_name());
+                if cfg!(windows) {
+                    candidate.set_extension("exe");
+                }
+                if candidate.exists() {
+                    return Ok(candidate.to_string_lossy().into_owned());
+                }
+            }
+        }
+    }
+
+    Ok(current.to_string_lossy().into_owned())
+}
+
+fn binary_name() -> &'static str {
+    "openastrovizd"
+}
+
+/// Entry point for the background daemon process. This function blocks
+/// indefinitely and is intended to be run by re-invoking the `openastrovizd`
+/// binary with the `--run-service` flag.
+pub fn run_service(config: Option<&PathBuf>) -> Result<(), io::Error> {
+    if let Some(path) = config {
+        if !path.exists() {
+            return Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                format!("Config file {} was not found", path.display()),
+            ));
+        }
+    }
+
+    loop {
+        std::thread::sleep(Duration::from_secs(60));
+    }
+}
+
+#[derive(Debug)]
+struct DaemonConfig {
+    command: String,
+    args: Vec<String>,
+    readiness_socket: Option<String>,
+    readiness_timeout: Duration,
+}
+
+impl DaemonConfig {
+    fn from_env() -> io::Result<Self> {
+        let command = env::var("OPENASTROVIZD_DAEMON_CMD")
+            .or_else(|_| default_binary_path())?;
+
+        let readiness_socket = env::var("OPENASTROVIZD_SOCKET").ok();
+        let readiness_timeout = env::var("OPENASTROVIZD_READY_TIMEOUT_MS")
+            .ok()
+            .and_then(|v| v.parse::<u64>().ok())
+            .map(Duration::from_millis)
+            .unwrap_or_else(|| Duration::from_secs(5));
+
+        let mut args: Vec<String> = env::var("OPENASTROVIZD_DAEMON_ARGS")
+            .map(|value| value.split_whitespace().map(|v| v.to_string()).collect())
+            .unwrap_or_else(|_| vec![String::from("--run-service")]);
+
+        if let Some(path) = env::var("OPENASTROVIZD_CONFIG").ok() {
+            args.push(String::from("--config"));
+            args.push(path);
+        }
+
+        Ok(Self {
+            command,
+            args,
+            readiness_socket,
+            readiness_timeout,
+        })
+    }
+}
+
 /// Starts the OpenAstroViz daemon by spawning a background process.
 ///
 /// The command used can be overridden with the `OPENASTROVIZD_DAEMON_CMD`
-/// environment variable (defaults to `sleep`). The optional argument for the
-/// command can be set via `OPENASTROVIZD_DAEMON_ARG` (defaults to `60`).
-/// A PID file is written to the system temporary directory so that the daemon
-/// can later be queried.
+/// environment variable (defaults to the compiled `openastrovizd` binary).
+/// Additional arguments can be supplied via `OPENASTROVIZD_DAEMON_ARGS`, and
+/// a configuration file path may be provided with `OPENASTROVIZD_CONFIG` (the
+/// path is forwarded to the service with a `--config` flag). When spawning the
+/// background service, this function waits until either a readiness socket is
+/// available (as specified by `OPENASTROVIZD_SOCKET`) or the daemon remains
+/// healthy for a short period before writing the PID file. Failures surfaced
+/// on stderr or an early exit are propagated back to the caller.
 ///
 /// # Examples
 /// ```no_run
@@ -57,18 +146,27 @@ pub fn start_daemon() -> Result<String, io::Error> {
         Err(e) => return Err(e),
     }
 
-    let cmd = env::var("OPENASTROVIZD_DAEMON_CMD").unwrap_or_else(|_| "sleep".to_string());
-    let arg = env::var("OPENASTROVIZD_DAEMON_ARG").unwrap_or_else(|_| "60".to_string());
+    let config = DaemonConfig::from_env()?;
 
-    let child = Command::new(&cmd)
-        .arg(&arg)
+    let mut child = Command::new(&config.command)
+        .args(&config.args)
         .stdout(Stdio::null())
-        .stderr(Stdio::null())
+        .stderr(Stdio::piped())
         .spawn()?;
-    let pid = child.id();
-    fs::write(&pid_path, pid.to_string())?;
 
-    Ok(format!("Daemon started with pid {pid}"))
+    match wait_for_readiness(&mut child, &config) {
+        Ok(()) => {
+            let pid = child.id();
+            fs::write(&pid_path, pid.to_string())?;
+
+            Ok(format!("Daemon started with pid {pid}"))
+        }
+        Err(e) => {
+            let _ = child.kill();
+            let _ = child.wait();
+            Err(e)
+        }
+    }
 }
 
 #[cfg(unix)]
@@ -95,6 +193,66 @@ fn process_running(pid: u32) -> bool {
             return false;
         }
         kill_result_indicates_running(result, errno)
+    }
+}
+
+fn wait_for_readiness(child: &mut Child, config: &DaemonConfig) -> io::Result<()> {
+    let start = Instant::now();
+
+    loop {
+        if let Some(status) = child.try_wait()? {
+            let stderr = read_child_stderr(child);
+            let msg = match status.code() {
+                Some(code) => format!("Daemon process exited with status {code}"),
+                None => String::from("Daemon process terminated by signal"),
+            };
+
+            let detail = stderr
+                .filter(|s| !s.trim().is_empty())
+                .map(|s| format!(": {s}"))
+                .unwrap_or_default();
+
+            return Err(io::Error::new(io::ErrorKind::Other, format!("{msg}{detail}")));
+        }
+
+        if let Some(socket) = &config.readiness_socket {
+            if socket_ready(socket) {
+                return Ok(());
+            }
+        }
+
+        if config.readiness_socket.is_none() && start.elapsed() >= Duration::from_millis(200) {
+            return Ok(());
+        }
+
+        if start.elapsed() >= config.readiness_timeout {
+            return Err(io::Error::new(
+                io::ErrorKind::TimedOut,
+                format!(
+                    "Timed out waiting for daemon readiness after {:?}",
+                    config.readiness_timeout
+                ),
+            ));
+        }
+
+        std::thread::sleep(Duration::from_millis(100));
+    }
+}
+
+fn read_child_stderr(child: &mut Child) -> Option<String> {
+    let mut stderr = child.stderr.take()?;
+    let mut buf = String::new();
+    match io::Read::read_to_string(&mut stderr, &mut buf) {
+        Ok(_) => Some(buf),
+        Err(_) => None,
+    }
+}
+
+fn socket_ready(target: &str) -> bool {
+    if target.contains(':') {
+        TcpStream::connect(target).is_ok()
+    } else {
+        Path::new(target).exists()
     }
 }
 
