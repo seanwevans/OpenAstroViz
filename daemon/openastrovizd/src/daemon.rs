@@ -80,8 +80,7 @@ struct DaemonConfig {
 
 impl DaemonConfig {
     fn from_env() -> io::Result<Self> {
-        let command = env::var("OPENASTROVIZD_DAEMON_CMD")
-            .or_else(|_| default_binary_path())?;
+        let command = env::var("OPENASTROVIZD_DAEMON_CMD").or_else(|_| default_binary_path())?;
 
         let readiness_socket = env::var("OPENASTROVIZD_SOCKET").ok();
         let readiness_timeout = env::var("OPENASTROVIZD_READY_TIMEOUT_MS")
@@ -215,7 +214,10 @@ fn wait_for_readiness(child: &mut Child, config: &DaemonConfig) -> io::Result<()
                 .map(|s| format!(": {s}"))
                 .unwrap_or_default();
 
-            return Err(io::Error::new(io::ErrorKind::Other, format!("{msg}{detail}")));
+            return Err(io::Error::new(
+                io::ErrorKind::Other,
+                format!("{msg}{detail}"),
+            ));
         }
 
         if let Some(socket) = &config.readiness_socket {
