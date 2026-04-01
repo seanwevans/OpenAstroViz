@@ -41,6 +41,17 @@ $ cargo run -p openastrovizd -- bench cuda # benchmark the CUDA backend
 
 The daemon is the link between the high‑level web interface and the low‑level compute kernels, serving orbit propagation results over local APIs.
 
+
+## Live orbital catalog refresh
+
+When the daemon runs in service mode (`start` command), it now launches an
+asynchronous refresh task backed by Tokio. The task downloads the public
+CelesTrak active-satellite TLE catalog once every 24 hours using `reqwest`,
+parses each 3-line record, builds Vallado-compatible propagators, and computes
+an epoch state vector per object. The in-memory catalog is protected by a
+`tokio::sync::RwLock` so future WebSocket handlers can read the current orbital
+state while refreshes hot-swap the catalog without disconnecting clients.
+
 ## Startup environment variables
 
 `openastrovizd start` supports these environment variables:
