@@ -80,4 +80,24 @@ mod tests {
         let err = parse_tle_catalog(src).expect_err("must fail");
         assert!(err.contains("missing line 2"));
     }
+
+    #[test]
+    fn rejects_bad_line_prefixes() {
+        let src_bad_line1 = "TEST\nX 00005U 58002B   00179.78495062  .00000023  00000-0  28098-4 0  4753\n2 00005  34.2682 348.7242 1859667 331.7664  19.3264 10.82419157413667\n";
+        let err = parse_tle_catalog(src_bad_line1).expect_err("must fail");
+        assert!(err.contains("invalid TLE line 1"));
+
+        let src_bad_line2 = "TEST\n1 00005U 58002B   00179.78495062  .00000023  00000-0  28098-4 0  4753\nX 00005  34.2682 348.7242 1859667 331.7664  19.3264 10.82419157413667\n";
+        let err = parse_tle_catalog(src_bad_line2).expect_err("must fail");
+        assert!(err.contains("invalid TLE line 2"));
+    }
+
+    #[test]
+    fn parses_multiple_objects_and_ignores_blank_lines() {
+        let src = "\nISS (ZARYA)\n1 25544U 98067A   20194.88612269 -.00002218  00000-0 -31515-4 0  9992\n2 25544  51.6461 221.2784 0001413  89.1723 280.4612 15.49507896236008\n\nISS CLONE\n1 25544U 98067A   20194.88612269 -.00002218  00000-0 -31515-4 0  9992\n2 25544  51.6461 221.2784 0001413  89.1723 280.4612 15.49507896236008\n";
+        let records = parse_tle_catalog(src).expect("catalog should parse");
+        assert_eq!(records.len(), 2);
+        assert_eq!(records[0].name, "ISS (ZARYA)");
+        assert_eq!(records[1].name, "ISS CLONE");
+    }
 }
