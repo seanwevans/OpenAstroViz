@@ -1,6 +1,7 @@
 use openastroviz_core::{Sgp4Propagator, StateVector};
 
-const CELESTRAK_ACTIVE_TLE_URL: &str = "https://celestrak.org/NORAD/elements/gp.php?GROUP=active&FORMAT=tle";
+const CELESTRAK_ACTIVE_TLE_URL: &str =
+    "https://celestrak.org/NORAD/elements/gp.php?GROUP=active&FORMAT=tle";
 
 #[allow(dead_code)]
 #[derive(Debug, Clone)]

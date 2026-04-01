@@ -73,7 +73,12 @@ pub fn run_service(config: Option<&PathBuf>) -> Result<(), io::Error> {
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
-        .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("tokio runtime init failed: {e}")))?;
+        .map_err(|e| {
+            io::Error::new(
+                io::ErrorKind::Other,
+                format!("tokio runtime init failed: {e}"),
+            )
+        })?;
 
     runtime.block_on(async move {
         let state = Arc::new(RwLock::new(Vec::<OrbitalRecord>::new()));
