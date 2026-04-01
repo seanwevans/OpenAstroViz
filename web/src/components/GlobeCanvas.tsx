@@ -11,9 +11,11 @@ import {
   Mesh,
   MeshPhongMaterial,
   PerspectiveCamera,
+  Quaternion,
   Raycaster,
   Scene,
   SphereGeometry,
+  Vector3,
   Vector2,
   WebGLRenderer
 } from 'three';
@@ -22,7 +24,9 @@ import { OrbitalObject } from '../types/orbit';
 
 const EARTH_RADIUS_KM = 6378.137;
 const SCALE_FACTOR = 1 / EARTH_RADIUS_KM;
-const MAX_OBJECTS = 10_000;
+const MAX_OBJECTS = 100_000;
+const MATRIX_SIZE = 16;
+const SATELLITE_SCALE = 1;
 
 export interface GlobeCanvasProps {
   objects: OrbitalObject[];
@@ -35,6 +39,7 @@ export function GlobeCanvas({ objects, onSelect, highlightedIds }: GlobeCanvasPr
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const instancedRef = useRef<InstancedMesh | null>(null);
   const objectsRef = useRef<OrbitalObject[]>([]);
+  const matrixBufferRef = useRef<Float32Array | null>(null);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -88,6 +93,7 @@ export function GlobeCanvas({ objects, onSelect, highlightedIds }: GlobeCanvasPr
     const satelliteMaterial = new MeshPhongMaterial({ color: 0xffffff });
     const instanced = new InstancedMesh(satelliteGeometry, satelliteMaterial, MAX_OBJECTS);
     instanced.instanceMatrix.setUsage(DynamicDrawUsage);
+    matrixBufferRef.current = instanced.instanceMatrix.array as Float32Array;
     instanced.instanceMatrix.needsUpdate = true;
     scene.add(instanced);
     instancedRef.current = instanced;
@@ -142,6 +148,7 @@ export function GlobeCanvas({ objects, onSelect, highlightedIds }: GlobeCanvasPr
       resizeObserver.disconnect();
       container.removeEventListener('pointerdown', onPointerDown);
       instancedRef.current = null;
+      matrixBufferRef.current = null;
       renderer.dispose();
       satelliteGeometry.dispose();
       satelliteMaterial.dispose();
@@ -154,10 +161,14 @@ export function GlobeCanvas({ objects, onSelect, highlightedIds }: GlobeCanvasPr
   useEffect(() => {
     objectsRef.current = objects.slice(0, MAX_OBJECTS);
     const instanced = instancedRef.current;
-    if (!instanced) {
+    const matrixBuffer = matrixBufferRef.current;
+    if (!instanced || !matrixBuffer) {
       return;
     }
     const matrix = new Matrix4();
+    const position = new Vector3();
+    const rotation = new Quaternion();
+    const scale = new Vector3(SATELLITE_SCALE, SATELLITE_SCALE, SATELLITE_SCALE);
     const color = new Color();
     const highlightSet = highlightedIds ?? new Set<string>();
 
@@ -167,8 +178,9 @@ export function GlobeCanvas({ objects, onSelect, highlightedIds }: GlobeCanvasPr
     for (let i = 0; i < length; i += 1) {
       const object = objectsRef.current[i];
       const [x, y, z] = object.position;
-      matrix.setPosition(x * SCALE_FACTOR, y * SCALE_FACTOR, z * SCALE_FACTOR);
-      instanced.setMatrixAt(i, matrix);
+      position.set(x * SCALE_FACTOR, y * SCALE_FACTOR, z * SCALE_FACTOR);
+      matrix.compose(position, rotation, scale);
+      matrix.toArray(matrixBuffer, i * MATRIX_SIZE);
       color.set(getObjectColor(object, highlightSet.has(object.id)));
       instanced.setColorAt(i, color);
     }
