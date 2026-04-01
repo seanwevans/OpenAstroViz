@@ -27,6 +27,16 @@ VITE_DAEMON_WS="wss://example.com/ws/orbits" \
 yarn dev
 ```
 
+
+
+## Build WebGPU compute wasm artifact
+
+```bash
+yarn build:wasm
+```
+
+This runs `wasm-pack` against `../webgpu-compute` and emits browser-loadable bindings into `web/pkg/`.
+
 ## Build & lint
 
 ```bash
