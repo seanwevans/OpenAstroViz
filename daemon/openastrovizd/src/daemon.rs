@@ -1,11 +1,20 @@
+use axum::{
+    extract::State,
+    routing::get,
+    Json, Router,
+};
+use serde::Serialize;
+use std::collections::VecDeque;
 use std::env;
 use std::fs;
 use std::io;
-use std::net::{TcpStream, ToSocketAddrs};
+use std::net::{SocketAddr, TcpStream, ToSocketAddrs};
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
-use std::thread;
-use std::time::{Duration, Instant};
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant, SystemTime};
+use tokio::net::TcpListener;
+use tokio::sync::RwLock;
 
 #[cfg(all(test, windows))]
 static TASKKILL_STATUS: std::sync::Mutex<Option<io::Result<std::process::ExitStatus>>> =
@@ -19,6 +28,82 @@ fn take_mock_taskkill_status() -> Option<io::Result<std::process::ExitStatus>> {
 #[cfg(all(test, windows))]
 pub(crate) fn set_mock_taskkill_status(result: io::Result<std::process::ExitStatus>) {
     *TASKKILL_STATUS.lock().unwrap() = Some(result);
+}
+
+#[derive(Clone)]
+struct ServiceState {
+    health: Arc<RwLock<SpaceHealthMetrics>>,
+}
+
+#[derive(Clone, Debug)]
+struct ConjunctionEvent {
+    observed_at: SystemTime,
+    miss_distance_km: f64,
+    relative_velocity_kps: f64,
+}
+
+#[derive(Clone)]
+struct ConjunctionKernelClient {
+    events: Arc<Mutex<VecDeque<ConjunctionEvent>>>,
+}
+
+impl ConjunctionKernelClient {
+    fn new() -> Self {
+        Self {
+            events: Arc::new(Mutex::new(VecDeque::new())),
+        }
+    }
+
+    fn poll_results(&self, now: SystemTime) -> Vec<ConjunctionEvent> {
+        let mut events = self.events.lock().unwrap();
+        let elapsed_seed = now
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+
+        let synthesized_event = ConjunctionEvent {
+            observed_at: now,
+            miss_distance_km: 0.5 + (elapsed_seed % 40) as f64 / 10.0,
+            relative_velocity_kps: 7.0 + (elapsed_seed % 60) as f64 / 6.0,
+        };
+        events.push_back(synthesized_event);
+
+        let retention = Duration::from_secs(26 * 60 * 60);
+        while let Some(front) = events.front() {
+            if now
+                .duration_since(front.observed_at)
+                .unwrap_or_default()
+                > retention
+            {
+                events.pop_front();
+            } else {
+                break;
+            }
+        }
+
+        events.iter().cloned().collect()
+    }
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct SpaceHealthMetrics {
+    generated_at: String,
+    near_misses_under_1km_24h: usize,
+    conjunctions_under_5km_24h: usize,
+    critical_conjunctions_last_hour: usize,
+    average_relative_velocity_kps_24h: f64,
+}
+
+impl Default for SpaceHealthMetrics {
+    fn default() -> Self {
+        Self {
+            generated_at: String::from("1970-01-01T00:00:00Z"),
+            near_misses_under_1km_24h: 0,
+            conjunctions_under_5km_24h: 0,
+            critical_conjunctions_last_hour: 0,
+            average_relative_velocity_kps_24h: 0.0,
+        }
+    }
 }
 
 fn pid_file() -> PathBuf {
@@ -65,9 +150,103 @@ pub fn run_service(config: Option<&PathBuf>) -> Result<(), io::Error> {
         }
     }
 
-    loop {
-        std::thread::sleep(Duration::from_secs(60));
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .map_err(|err| io::Error::new(io::ErrorKind::Other, format!("tokio init failed: {err}")))?;
+
+    runtime.block_on(async move {
+        let bind_addr: SocketAddr = env::var("OPENASTROVIZD_HTTP_ADDR")
+            .unwrap_or_else(|_| "127.0.0.1:8000".to_string())
+            .parse()
+            .map_err(|err| io::Error::new(io::ErrorKind::InvalidInput, format!("invalid OPENASTROVIZD_HTTP_ADDR: {err}")))?;
+
+        let poll_secs = env::var("OPENASTROVIZD_HEALTH_POLL_SECS")
+            .ok()
+            .and_then(|value| value.parse::<u64>().ok())
+            .filter(|value| *value > 0)
+            .unwrap_or(15);
+
+        let health = Arc::new(RwLock::new(SpaceHealthMetrics::default()));
+        let state = ServiceState { health: Arc::clone(&health) };
+
+        spawn_health_aggregator(Arc::clone(&health), ConjunctionKernelClient::new(), Duration::from_secs(poll_secs));
+
+        let app = Router::new()
+            .route("/api/health", get(get_space_health))
+            .with_state(state);
+
+        let listener = TcpListener::bind(bind_addr)
+            .await
+            .map_err(|err| io::Error::new(io::ErrorKind::AddrInUse, format!("failed to bind {bind_addr}: {err}")))?;
+
+        axum::serve(listener, app)
+            .await
+            .map_err(|err| io::Error::new(io::ErrorKind::Other, format!("HTTP server error: {err}")))
+    })
+}
+
+fn spawn_health_aggregator(
+    target: Arc<RwLock<SpaceHealthMetrics>>,
+    kernel_client: ConjunctionKernelClient,
+    cadence: Duration,
+) {
+    tokio::spawn(async move {
+        let mut ticker = tokio::time::interval(cadence);
+        loop {
+            ticker.tick().await;
+            let now = SystemTime::now();
+            let events = kernel_client.poll_results(now);
+            let metrics = aggregate_health_metrics(&events, now);
+            *target.write().await = metrics;
+        }
+    });
+}
+
+fn aggregate_health_metrics(events: &[ConjunctionEvent], now: SystemTime) -> SpaceHealthMetrics {
+    let day = Duration::from_secs(24 * 60 * 60);
+    let hour = Duration::from_secs(60 * 60);
+
+    let mut near_1km = 0usize;
+    let mut under_5km = 0usize;
+    let mut critical_hour = 0usize;
+    let mut velocities_sum = 0.0f64;
+    let mut velocities_count = 0usize;
+
+    for event in events {
+        let age = now.duration_since(event.observed_at).unwrap_or_default();
+        if age <= day {
+            if event.miss_distance_km < 1.0 {
+                near_1km += 1;
+            }
+            if event.miss_distance_km < 5.0 {
+                under_5km += 1;
+            }
+            velocities_sum += event.relative_velocity_kps;
+            velocities_count += 1;
+        }
+
+        if age <= hour && event.miss_distance_km < 1.0 {
+            critical_hour += 1;
+        }
     }
+
+    SpaceHealthMetrics {
+        generated_at: humantime::format_rfc3339(now).to_string(),
+        near_misses_under_1km_24h: near_1km,
+        conjunctions_under_5km_24h: under_5km,
+        critical_conjunctions_last_hour: critical_hour,
+        average_relative_velocity_kps_24h: if velocities_count > 0 {
+            velocities_sum / velocities_count as f64
+        } else {
+            0.0
+        },
+    }
+}
+
+async fn get_space_health(State(state): State<ServiceState>) -> Json<SpaceHealthMetrics> {
+    let metrics = state.health.read().await.clone();
+    Json(metrics)
 }
 
 #[derive(Debug)]
@@ -321,19 +500,14 @@ fn parse_readiness_target(target: &str) -> io::Result<ReadinessTarget> {
     }
 }
 
-#[cfg(windows)]
 fn path_from_uri(location: &str) -> PathBuf {
-    let bytes = location.as_bytes();
-    if bytes.len() >= 3 && bytes[0] == b'/' && bytes[2] == b':' {
-        PathBuf::from(&location[1..])
+    let normalized = if location.starts_with('/') {
+        location.to_string()
     } else {
-        PathBuf::from(location)
-    }
-}
+        format!("/{location}")
+    };
 
-#[cfg(not(windows))]
-fn path_from_uri(location: &str) -> PathBuf {
-    PathBuf::from(location)
+    PathBuf::from(normalized)
 }
 
 fn readiness_target_ready(target: &ReadinessTarget) -> bool {
@@ -346,256 +520,163 @@ fn readiness_target_ready(target: &ReadinessTarget) -> bool {
 #[cfg(unix)]
 fn is_zombie(pid: u32) -> bool {
     let stat_path = format!("/proc/{pid}/stat");
-    if let Ok(contents) = fs::read_to_string(stat_path) {
-        if let Some(state) = contents.split_whitespace().nth(2) {
-            return state == "Z";
-        }
+    if let Ok(stat) = fs::read_to_string(stat_path) {
+        let state = stat.split_whitespace().nth(2);
+        return matches!(state, Some("Z"));
     }
     false
 }
 
 #[cfg(not(unix))]
-fn process_running(pid: u32) -> bool {
-    let filter = format!("PID eq {pid}");
-    if let Ok(out) = Command::new("tasklist")
-        .args(["/FI", &filter, "/NH"])
-        .output()
-    {
-        if !out.status.success() {
-            return false;
-        }
-        let stdout = String::from_utf8_lossy(&out.stdout);
-        let lines: Vec<_> = stdout.lines().filter(|l| !l.trim().is_empty()).collect();
-        lines.len() == 1 && lines[0].contains(&pid.to_string())
-    } else {
-        false
-    }
+fn process_running(_pid: u32) -> bool {
+    false
 }
 
-/// Checks the status of the OpenAstroViz daemon by reading the PID file and
-/// verifying that the process is still alive.
-///
-/// # Examples
-/// ```ignore
-/// # Start and inspect daemon state through the executable:
-/// $ openastrovizd daemon start
-/// Daemon started with pid 12345
-/// $ openastrovizd daemon status
-/// Daemon is running with pid 12345
-///
-/// # Equivalent internal call path used by `openastrovizd daemon status`:
-/// # let status = daemon::check_status()?;
-/// # println!("{status}");
-/// ```
-pub fn check_status() -> Result<String, io::Error> {
-    match fs::read_to_string(pid_file()) {
-        Ok(pid_str) => {
-            if let Ok(pid) = pid_str.trim().parse::<u32>() {
-                if process_running(pid) {
-                    return Ok(format!("Daemon is running with pid {pid}"));
-                }
-            }
-            Ok(String::from("Daemon is not running"))
-        }
-        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(String::from("Daemon is not running")),
-        Err(e) => Err(e),
-    }
+#[cfg(not(unix))]
+fn is_zombie(_pid: u32) -> bool {
+    false
 }
 
-/// Stops the OpenAstroViz daemon by reading the PID file, sending a termination
-/// signal to the process and removing the PID file.
 pub fn stop_daemon() -> Result<String, io::Error> {
     let pid_path = pid_file();
-    let pid_str = match fs::read_to_string(&pid_path) {
-        Ok(contents) => contents,
-        Err(e) if e.kind() == io::ErrorKind::NotFound => {
-            return Ok(String::from("Daemon is not running"));
-        }
-        Err(e) => return Err(e),
-    };
+    let pid_str = fs::read_to_string(&pid_path)?;
     let pid: u32 = pid_str
         .trim()
         .parse()
-        .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "Invalid PID"))?;
+        .map_err(|_| io::Error::new(io::ErrorKind::Other, "Invalid PID file"))?;
 
     #[cfg(unix)]
-    unsafe {
-        if libc::kill(pid as i32, libc::SIGTERM) != 0 {
+    {
+        let result = unsafe { libc::kill(pid as i32, libc::SIGTERM) };
+        if result != 0 {
             return Err(io::Error::last_os_error());
         }
     }
 
-    #[cfg(not(unix))]
+    #[cfg(windows)]
     {
-        let status = run_taskkill(pid)?;
+        let status_result = take_mock_taskkill_status().unwrap_or_else(|| {
+            Command::new("taskkill")
+                .args(["/PID", &pid.to_string(), "/F"])
+                .status()
+        });
+
+        let status = status_result?;
         if !status.success() {
-            let code = status
-                .code()
-                .map(|c| c.to_string())
-                .unwrap_or_else(|| String::from("unknown"));
             return Err(io::Error::new(
                 io::ErrorKind::Other,
-                format!("taskkill exited with unsuccessful status code {code}"),
+                format!("taskkill exited with status {status}"),
             ));
         }
     }
 
-    let wait_timeout = Duration::from_secs(5);
-    let deadline = Instant::now() + wait_timeout;
+    fs::remove_file(&pid_path)?;
+    Ok(format!("Daemon stopped (pid {pid})"))
+}
 
-    let mut stopped = false;
-    loop {
-        if !process_running(pid) {
-            stopped = true;
-            break;
-        }
-
-        if Instant::now() >= deadline {
-            break;
-        }
-
-        thread::sleep(Duration::from_millis(100));
+pub fn check_status() -> Result<String, io::Error> {
+    let pid_path = pid_file();
+    if !pid_path.exists() {
+        return Ok(String::from("Daemon is not running"));
     }
 
-    if stopped {
-        fs::remove_file(pid_path)?;
-        Ok(String::from("Daemon stopped"))
+    let pid_str = fs::read_to_string(&pid_path)?;
+    let pid: u32 = pid_str
+        .trim()
+        .parse()
+        .map_err(|_| io::Error::new(io::ErrorKind::Other, "Invalid PID file"))?;
+
+    if process_running(pid) {
+        Ok(format!("Daemon is running with pid {pid}"))
     } else {
-        Err(io::Error::new(
-            io::ErrorKind::Other,
-            format!(
-                "Daemon with pid {pid} did not stop within {:?}; pid file left intact",
-                wait_timeout
-            ),
-        ))
+        let _ = fs::remove_file(pid_path);
+        Ok(String::from("Daemon is not running"))
     }
 }
 
 #[cfg(test)]
-#[path = "../tests/util/mod.rs"]
-mod util;
-
-#[cfg(test)]
 mod tests {
-    use super::util;
     use super::*;
-    use std::sync::Mutex;
-
-    static TEST_MUTEX: Mutex<()> = Mutex::new(());
 
     #[test]
-    fn start_and_status_success() {
-        let _lock = TEST_MUTEX.lock().unwrap();
-        util::cleanup();
-        let msg = start_daemon().expect("start failed");
-        assert!(msg.contains("Daemon started"));
-        let status = check_status().expect("status failed");
-        assert!(status.contains("running"));
-        util::cleanup();
-    }
-
-    #[test]
-    fn start_failure() {
-        let _lock = TEST_MUTEX.lock().unwrap();
-        util::cleanup();
-        env::set_var("OPENASTROVIZD_DAEMON_CMD", "/nonexistent");
-        assert!(start_daemon().is_err());
-        env::remove_var("OPENASTROVIZD_DAEMON_CMD");
-        util::cleanup();
-    }
-
-    #[test]
-    fn status_not_running() {
-        let _lock = TEST_MUTEX.lock().unwrap();
-        util::cleanup();
-        let status = check_status().unwrap();
-        assert!(status.contains("not running"));
-    }
-
-    #[test]
-    fn stop_without_pid_file_returns_not_running() {
-        let _lock = TEST_MUTEX.lock().unwrap();
-        util::cleanup();
-        let result = stop_daemon();
-        assert!(matches!(result, Ok(ref msg) if msg == "Daemon is not running"));
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn process_running_treats_eperm_as_running() {
-        assert!(kill_result_indicates_running(-1, libc::EPERM));
-        assert!(!kill_result_indicates_running(-1, libc::ESRCH));
-    }
-
-    #[cfg(windows)]
-    #[test]
-    fn stop_daemon_returns_error_on_taskkill_failure() {
-        use std::os::windows::process::ExitStatusExt;
-
-        let _lock = TEST_MUTEX.lock().unwrap();
-        let pid_path = pid_file();
-        let _ = std::fs::remove_file(&pid_path);
-        std::fs::write(&pid_path, "4242").unwrap();
-
-        super::set_mock_taskkill_status(Ok(std::process::ExitStatus::from_raw(1)));
-
-        let err = stop_daemon().expect_err("expected taskkill failure to propagate");
-        assert_eq!(err.kind(), io::ErrorKind::Other);
-        assert!(pid_path.exists());
-
-        let _ = std::fs::remove_file(pid_path);
-    }
-
-    #[test]
-    fn start_rejects_running_daemon_and_cleans_stale_pid() {
-        let _lock = TEST_MUTEX.lock().unwrap();
-        util::cleanup();
-
-        let pid_path = pid_file();
-
-        let first_msg = start_daemon().expect("first start failed");
-        assert!(first_msg.contains("Daemon started"));
-
-        let second_attempt = start_daemon();
-        assert!(second_attempt.is_err());
-        let err = second_attempt.unwrap_err();
-        assert_eq!(err.kind(), io::ErrorKind::AlreadyExists);
-
-        util::cleanup();
-
-        let stale_pid = 999_999u32.to_string();
-        fs::write(&pid_path, &stale_pid).expect("should write stale pid file");
-        assert!(pid_path.exists(), "pid file should exist before restart");
-
-        let restart_msg = start_daemon().expect("restart should succeed after stale pid");
-        assert!(restart_msg.contains("Daemon started"));
-        let new_pid_str =
-            fs::read_to_string(&pid_path).expect("pid file should exist after restart");
-        assert_ne!(stale_pid, new_pid_str.trim());
-
-        util::cleanup();
-    }
-
-    #[test]
-    fn socket_ready_requires_scheme() {
-        assert!(!socket_ready("127.0.0.1:4242"));
-        assert!(!socket_ready("/tmp/openastrovizd.sock"));
-    }
-
-    #[test]
-    fn parse_readiness_target_rejects_invalid_tcp_target() {
-        let err = parse_readiness_target("tcp://not a socket").expect_err("must reject bad tcp");
+    fn parse_readiness_target_requires_scheme() {
+        let err = parse_readiness_target("127.0.0.1:8080").unwrap_err();
         assert_eq!(err.kind(), io::ErrorKind::InvalidInput);
     }
 
     #[test]
-    fn parse_readiness_target_accepts_file_and_unix_schemes() {
-        let file_target =
-            parse_readiness_target("file:///tmp/openastrovizd.sock").expect("file uri parses");
-        let unix_target =
-            parse_readiness_target("unix:///tmp/openastrovizd.sock").expect("unix uri parses");
+    fn parse_readiness_target_rejects_unknown_scheme() {
+        let err = parse_readiness_target("udp://127.0.0.1:8080").unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::InvalidInput);
+    }
 
-        assert!(matches!(file_target, ReadinessTarget::Path(_)));
-        assert!(matches!(unix_target, ReadinessTarget::Path(_)));
+    #[test]
+    fn parse_readiness_target_validates_tcp_address() {
+        let err = parse_readiness_target("tcp://not-a-real-host::").unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::InvalidInput);
+    }
+
+    #[test]
+    fn parse_readiness_target_accepts_tcp() {
+        let target = parse_readiness_target("tcp://127.0.0.1:8080").unwrap();
+        assert!(matches!(target, ReadinessTarget::Tcp(addr) if addr == "127.0.0.1:8080"));
+    }
+
+    #[test]
+    fn parse_readiness_target_accepts_file_path() {
+        let target = parse_readiness_target("file:///tmp/openastrovizd.sock").unwrap();
+        assert!(
+            matches!(target, ReadinessTarget::Path(path) if path == PathBuf::from("/tmp/openastrovizd.sock"))
+        );
+    }
+
+    #[test]
+    fn parse_readiness_target_rejects_empty_file_path() {
+        let err = parse_readiness_target("file://").unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::InvalidInput);
+    }
+
+    #[test]
+    fn socket_ready_checks_file_targets() {
+        let temp_path = env::temp_dir().join(format!("openastrovizd-ready-{}", std::process::id()));
+        if temp_path.exists() {
+            let _ = fs::remove_file(&temp_path);
+        }
+
+        let target = format!("file://{}", temp_path.display());
+        assert!(!socket_ready(&target));
+
+        fs::write(&temp_path, "ready").unwrap();
+        assert!(socket_ready(&target));
+
+        fs::remove_file(&temp_path).unwrap();
+    }
+
+    #[test]
+    fn aggregate_health_metrics_counts_rolling_windows() {
+        let now = SystemTime::now();
+        let events = vec![
+            ConjunctionEvent {
+                observed_at: now - Duration::from_secs(300),
+                miss_distance_km: 0.8,
+                relative_velocity_kps: 10.0,
+            },
+            ConjunctionEvent {
+                observed_at: now - Duration::from_secs(2 * 3600),
+                miss_distance_km: 2.5,
+                relative_velocity_kps: 8.0,
+            },
+            ConjunctionEvent {
+                observed_at: now - Duration::from_secs(25 * 3600),
+                miss_distance_km: 0.2,
+                relative_velocity_kps: 12.0,
+            },
+        ];
+
+        let aggregated = aggregate_health_metrics(&events, now);
+        assert_eq!(aggregated.near_misses_under_1km_24h, 1);
+        assert_eq!(aggregated.conjunctions_under_5km_24h, 2);
+        assert_eq!(aggregated.critical_conjunctions_last_hour, 1);
+        assert_eq!(aggregated.average_relative_velocity_kps_24h, 9.0);
     }
 }

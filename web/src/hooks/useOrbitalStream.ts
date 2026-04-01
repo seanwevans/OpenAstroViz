@@ -2,7 +2,13 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { addSeconds, differenceInSeconds, parseISO } from 'date-fns';
 import useSWR from 'swr';
 import { mockSnapshot } from '../utils/mockData';
-import { CloseApproach, OrbitalObject, OrbitalSnapshot, OrbitalStreamMessage } from '../types/orbit';
+import {
+  CloseApproach,
+  OrbitalObject,
+  OrbitalSnapshot,
+  OrbitalStreamMessage,
+  SpaceHealthMetrics
+} from '../types/orbit';
 
 const fallbackHttpUrl = import.meta.env.VITE_DAEMON_HTTP ?? 'http://localhost:8000';
 const fallbackWsUrl = import.meta.env.VITE_DAEMON_WS ?? 'ws://localhost:8000/ws/orbits';
@@ -16,6 +22,7 @@ const fetcher = (url: string) => fetch(url).then((res) => {
 
 export interface OrbitalStreamState {
   snapshot: OrbitalSnapshot;
+  spaceHealth?: SpaceHealthMetrics;
   status: 'connecting' | 'live' | 'offline';
   error?: string;
 }
@@ -91,6 +98,20 @@ export function useOrbitalStream(): OrbitalStreamState {
     }
   );
 
+  const { data: rawHealth } = useSWR(
+    `${fallbackHttpUrl}/api/health`,
+    fetcher,
+    {
+      refreshInterval: 15_000,
+      shouldRetryOnError: false
+    }
+  );
+
+  const spaceHealth = useMemo(
+    () => mapHealthPayload(rawHealth),
+    [rawHealth]
+  );
+
   useEffect(() => {
     if (data) {
       setSnapshot(applySnapshot(data));
@@ -100,11 +121,26 @@ export function useOrbitalStream(): OrbitalStreamState {
   return useMemo(
     () => ({
       snapshot,
+      spaceHealth,
       status: status === 'connecting' && snapshot !== mockSnapshot ? 'live' : status,
       error
     }),
-    [snapshot, status, error]
+    [snapshot, spaceHealth, status, error]
   );
+}
+
+function mapHealthPayload(raw: any): SpaceHealthMetrics | undefined {
+  if (!raw) {
+    return undefined;
+  }
+
+  return {
+    generatedAt: raw.generated_at,
+    nearMissesUnder1Km24h: raw.near_misses_under_1km_24h,
+    conjunctionsUnder5Km24h: raw.conjunctions_under_5km_24h,
+    criticalConjunctionsLastHour: raw.critical_conjunctions_last_hour,
+    averageRelativeVelocityKps24h: raw.average_relative_velocity_kps_24h
+  };
 }
 
 function applySnapshot(snapshot: OrbitalSnapshot): OrbitalSnapshot {

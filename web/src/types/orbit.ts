@@ -28,6 +28,15 @@ export interface OrbitalObject {
   closeApproaches?: CloseApproach[];
 }
 
+
+export interface SpaceHealthMetrics {
+  generatedAt: string; // ISO timestamp
+  nearMissesUnder1Km24h: number;
+  conjunctionsUnder5Km24h: number;
+  criticalConjunctionsLastHour: number;
+  averageRelativeVelocityKps24h: number;
+}
+
 export interface OrbitalSnapshot {
   epoch: string;
   start: string;

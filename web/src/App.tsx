@@ -9,7 +9,7 @@ import { useOrbitalStream } from './hooks/useOrbitalStream';
 import { OrbitalObject } from './types/orbit';
 
 export default function App() {
-  const { snapshot, status, error } = useOrbitalStream();
+  const { snapshot, spaceHealth, status, error } = useOrbitalStream();
   const [timeOffset, setTimeOffset] = useState(0);
   const [isLiveMode, setIsLiveMode] = useState(true);
   const [selectedObjectId, setSelectedObjectId] = useState<string>();
@@ -100,7 +100,7 @@ export default function App() {
       </div>
 
       <div className="right-column">
-        <SpaceHealthPanel snapshot={snapshot} />
+        <SpaceHealthPanel snapshot={snapshot} spaceHealth={spaceHealth} />
         <ObjectDetails object={selectedObject} />
         <CloseApproachPanel
           approaches={snapshot.closeApproaches}
