@@ -51,13 +51,17 @@ jobs:
         with:
           commit_message: "chore: auto-format"
       - name: Install web dependencies
-        run: yarn --cwd web install --frozen-lockfile
+        working-directory: web
+        run: yarn install --immutable
       - name: Run web linter
-        run: yarn --cwd web lint
+        working-directory: web
+        run: yarn lint
       - name: Run web tests
-        run: yarn --cwd web test
+        working-directory: web
+        run: yarn test
       - name: Build web app (type-check)
-        run: yarn --cwd web build
+        working-directory: web
+        run: yarn build
       - name: Build daemon
         run: cargo build -p openastrovizd --verbose
       - name: Run Rust tests (all targets/features)
@@ -93,9 +97,11 @@ jobs:
       - name: Enable Corepack
         run: corepack enable
       - name: Install web dependencies
-        run: yarn --cwd web install --frozen-lockfile
+        working-directory: web
+        run: yarn install --immutable
       - name: Build web app
-        run: yarn --cwd web build
+        working-directory: web
+        run: yarn build
       - name: Configure Pages
         uses: actions/configure-pages@v4
       - name: Upload artifact
