@@ -121,13 +121,13 @@ impl DaemonConfig {
 /// on stderr or an early exit are propagated back to the caller.
 ///
 /// # Examples
-/// ```no_run
-/// use openastrovizd::daemon::start_daemon;
+/// ```ignore
+/// # Run via CLI (current architecture)
+/// $ openastrovizd daemon start
+/// Daemon started with pid 12345
 ///
-/// # fn main() -> Result<(), std::io::Error> {
-/// start_daemon()?;
-/// # Ok(())
-/// # }
+/// # Equivalent internal call path used by the CLI command handler:
+/// # daemon::start_daemon()?;
 /// ```
 pub fn start_daemon() -> Result<String, io::Error> {
     let pid_path = pid_file();
@@ -298,15 +298,16 @@ fn process_running(pid: u32) -> bool {
 /// verifying that the process is still alive.
 ///
 /// # Examples
-/// ```no_run
-/// use openastrovizd::daemon::{start_daemon, check_status};
+/// ```ignore
+/// # Start and inspect daemon state through the executable:
+/// $ openastrovizd daemon start
+/// Daemon started with pid 12345
+/// $ openastrovizd daemon status
+/// Daemon is running with pid 12345
 ///
-/// # fn main() -> Result<(), std::io::Error> {
-/// start_daemon()?;
-/// let status = check_status()?;
-/// println!("{status}");
-/// # Ok(())
-/// # }
+/// # Equivalent internal call path used by `openastrovizd daemon status`:
+/// # let status = daemon::check_status()?;
+/// # println!("{status}");
 /// ```
 pub fn check_status() -> Result<String, io::Error> {
     match fs::read_to_string(pid_file()) {
