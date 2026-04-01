@@ -4,8 +4,13 @@ use std::io;
 use std::net::{TcpStream, ToSocketAddrs};
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
+use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
+
+use tokio::sync::RwLock;
+
+use crate::tle::{fetch_tle_catalog, parse_tle_catalog, OrbitalRecord};
 
 #[cfg(all(test, windows))]
 static TASKKILL_STATUS: std::sync::Mutex<Option<io::Result<std::process::ExitStatus>>> =
@@ -65,8 +70,39 @@ pub fn run_service(config: Option<&PathBuf>) -> Result<(), io::Error> {
         }
     }
 
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("tokio runtime init failed: {e}")))?;
+
+    runtime.block_on(async move {
+        let state = Arc::new(RwLock::new(Vec::<OrbitalRecord>::new()));
+        tokio::spawn(tle_refresh_loop(Arc::clone(&state)));
+
+        loop {
+            tokio::time::sleep(Duration::from_secs(60)).await;
+        }
+    })
+}
+
+async fn tle_refresh_loop(state: Arc<RwLock<Vec<OrbitalRecord>>>) {
+    let client = reqwest::Client::new();
+
     loop {
-        std::thread::sleep(Duration::from_secs(60));
+        match fetch_tle_catalog(&client).await {
+            Ok(raw_catalog) => match parse_tle_catalog(&raw_catalog) {
+                Ok(next) => {
+                    let count = next.len();
+                    let mut shared = state.write().await;
+                    *shared = next;
+                    eprintln!("Loaded {count} TLE records into live orbital state");
+                }
+                Err(err) => eprintln!("TLE parse error: {err}"),
+            },
+            Err(err) => eprintln!("TLE fetch error: {err}"),
+        }
+
+        tokio::time::sleep(Duration::from_secs(24 * 60 * 60)).await;
     }
 }
 

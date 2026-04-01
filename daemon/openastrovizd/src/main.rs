@@ -4,6 +4,7 @@ use std::path::PathBuf;
 mod backend;
 mod bench;
 mod daemon;
+mod tle;
 use backend::Backend;
 use bench::{bench_backend, BenchError};
 
