@@ -25,6 +25,31 @@ pub enum PropagationError {
     Propagation(#[from] sgp4::Error),
 }
 
+/// Errors surfaced by GPU backend implementations.
+#[derive(Debug, Error)]
+pub enum GpuBackendError {
+    #[error("backend is not ready")]
+    NotReady,
+    #[error("invalid dispatch batch size: {0}")]
+    InvalidBatchSize(u32),
+    #[error("shader compilation failed: {0}")]
+    ShaderCompile(String),
+    #[error("compute dispatch failed: {0}")]
+    Dispatch(String),
+}
+
+/// Contract shared by CUDA and WebGPU compute backends.
+pub trait GpuBackend {
+    /// User-visible backend name.
+    fn name(&self) -> &'static str;
+
+    /// Whether this backend has been initialized and can accept work.
+    fn is_ready(&self) -> bool;
+
+    /// Dispatch one FP32 SGP4 kernel step for the given orbital batch size.
+    fn dispatch_sgp4_fp32_step(&self, batch_size: u32) -> Result<(), GpuBackendError>;
+}
+
 /// Thin wrapper around the Vallado SGP4 implementation from the [`sgp4`] crate.
 #[derive(Debug, Clone)]
 pub struct Sgp4Propagator {
