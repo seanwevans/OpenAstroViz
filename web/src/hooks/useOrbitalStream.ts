@@ -25,7 +25,7 @@ export function useOrbitalStream(): OrbitalStreamState {
   const [status, setStatus] = useState<OrbitalStreamState['status']>('connecting');
   const [error, setError] = useState<string>();
   const wsRef = useRef<WebSocket | null>(null);
-  const reconnectRef = useRef<number>();
+  const reconnectRef = useRef<number | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -71,7 +71,7 @@ export function useOrbitalStream(): OrbitalStreamState {
 
     return () => {
       controller.abort();
-      if (reconnectRef.current) {
+      if (reconnectRef.current !== null) {
         window.clearTimeout(reconnectRef.current);
       }
       wsRef.current?.close();
