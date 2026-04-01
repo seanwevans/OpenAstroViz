@@ -119,12 +119,16 @@ install_node() {
 }
 
 install_yarn() {
-    if ! command -v yarn >/dev/null 2>&1; then
-        info "Installing Yarn"
-        npm install -g yarn
-    else
-        info "Yarn already installed"
+    if ! command -v corepack >/dev/null 2>&1; then
+        info "Error: corepack is required to manage Yarn. Please install a Node.js release that includes corepack."
+        return 1
     fi
+
+    info "Enabling Corepack"
+    corepack enable
+
+    info "Preparing pinned Yarn version"
+    corepack prepare yarn@4.12.0 --activate
 }
 
 setup_precommit() {

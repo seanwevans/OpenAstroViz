@@ -31,8 +31,8 @@ jobs:
         uses: actions/setup-node@v3
         with:
           node-version: '18'
-      - name: Install Yarn
-        run: npm install -g yarn
+      - name: Enable Corepack
+        run: corepack enable
       - name: Install C++ test dependencies
         run: |
           sudo apt-get update
@@ -88,8 +88,8 @@ jobs:
         uses: actions/setup-node@v3
         with:
           node-version: '18'
-      - name: Install Yarn
-        run: npm install -g yarn
+      - name: Enable Corepack
+        run: corepack enable
       - name: Install web dependencies
         run: yarn --cwd web install --frozen-lockfile
       - name: Build web app
