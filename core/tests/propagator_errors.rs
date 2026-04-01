@@ -27,11 +27,9 @@ fn exposes_epoch_from_tle() {
         Sgp4Propagator::from_tle(Some("Vanguard 1".to_string()), LINE1, LINE2).unwrap();
     let epoch = propagator.epoch();
 
-    let expected = chrono::NaiveDateTime::parse_from_str(
-        "2000-06-27T18:50:19.733571",
-        "%Y-%m-%dT%H:%M:%S%.f",
-    )
-    .unwrap();
+    let expected =
+        chrono::NaiveDateTime::parse_from_str("2000-06-27T18:50:19.733571", "%Y-%m-%dT%H:%M:%S%.f")
+            .unwrap();
     let delta_ms = (epoch - expected).num_microseconds().unwrap().abs();
     assert!(delta_ms <= 10);
 }
