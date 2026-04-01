@@ -265,6 +265,8 @@ fn socket_ready(target: &str) -> bool {
     } else {
         Path::new(target).exists()
     }
+}
+
 #[cfg(unix)]
 fn is_zombie(pid: u32) -> bool {
     let stat_path = format!("/proc/{pid}/stat");
