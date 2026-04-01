@@ -56,10 +56,12 @@ jobs:
         run: yarn --cwd web lint
       - name: Run web tests
         run: yarn --cwd web test
+      - name: Build web app (type-check)
+        run: yarn --cwd web build
       - name: Build daemon
         run: cargo build -p openastrovizd --verbose
-      - name: Run tests
-        run: cargo test --workspace --verbose
+      - name: Run Rust tests (all targets/features)
+        run: cargo test --workspace --all-targets --all-features --verbose
       - name: Run C++ tests
         run: ./scripts/run_tests.sh
       - name: Check Rust formatting
