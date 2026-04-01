@@ -40,3 +40,26 @@ $ cargo run -p openastrovizd -- bench cuda # benchmark the CUDA backend
 ```
 
 The daemon is the link between the high‑level web interface and the low‑level compute kernels, serving orbit propagation results over local APIs.
+
+## Startup environment variables
+
+`openastrovizd start` supports these environment variables:
+
+- `OPENASTROVIZD_DAEMON_CMD`: override daemon executable path.
+- `OPENASTROVIZD_DAEMON_ARGS`: override daemon arguments.
+- `OPENASTROVIZD_CONFIG`: config file passed as `--config <path>`.
+- `OPENASTROVIZD_READY_TIMEOUT_MS`: readiness timeout (milliseconds).
+- `OPENASTROVIZD_SOCKET`: readiness target URI with an explicit scheme:
+  - `tcp://host:port`
+  - `unix:///path/to/socket`
+  - `file:///path/to/ready/file`
+
+Examples:
+
+```bash
+OPENASTROVIZD_SOCKET=tcp://127.0.0.1:8765
+OPENASTROVIZD_SOCKET=unix:///tmp/openastrovizd.sock
+OPENASTROVIZD_SOCKET=file:///tmp/openastrovizd.ready
+OPENASTROVIZD_SOCKET=file:///C:/Temp/openastrovizd.ready  # Windows path
+OPENASTROVIZD_READY_TIMEOUT_MS=8000
+```

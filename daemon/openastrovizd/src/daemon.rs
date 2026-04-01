@@ -1,8 +1,8 @@
 use std::env;
 use std::fs;
 use std::io;
-use std::net::TcpStream;
-use std::path::{Path, PathBuf};
+use std::net::{TcpStream, ToSocketAddrs};
+use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -76,6 +76,12 @@ struct DaemonConfig {
     args: Vec<String>,
     readiness_socket: Option<String>,
     readiness_timeout: Duration,
+}
+
+#[derive(Debug, Clone)]
+enum ReadinessTarget {
+    Tcp(String),
+    Path(PathBuf),
 }
 
 impl DaemonConfig {
@@ -200,6 +206,11 @@ fn process_running(pid: u32) -> bool {
 }
 
 fn wait_for_readiness(child: &mut Child, config: &DaemonConfig) -> io::Result<()> {
+    let readiness_target = config
+        .readiness_socket
+        .as_deref()
+        .map(parse_readiness_target)
+        .transpose()?;
     let start = Instant::now();
 
     loop {
@@ -218,8 +229,8 @@ fn wait_for_readiness(child: &mut Child, config: &DaemonConfig) -> io::Result<()
             return Err(io::Error::new(io::ErrorKind::Other, format!("{msg}{detail}")));
         }
 
-        if let Some(socket) = &config.readiness_socket {
-            if socket_ready(socket) {
+        if let Some(target) = &readiness_target {
+            if readiness_target_ready(target) {
                 return Ok(());
             }
         }
@@ -259,12 +270,77 @@ fn forward_child_stderr(child: &mut Child) {
     }
 }
 
+#[cfg(test)]
 fn socket_ready(target: &str) -> bool {
-    if target.contains(':') {
-        TcpStream::connect(target).is_ok()
-    } else {
-        Path::new(target).exists()
+    parse_readiness_target(target)
+        .map(|parsed| readiness_target_ready(&parsed))
+        .unwrap_or(false)
+}
+
+fn parse_readiness_target(target: &str) -> io::Result<ReadinessTarget> {
+    let (scheme, location) = target.split_once("://").ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "OPENASTROVIZD_SOCKET must include a scheme: tcp://, unix://, or file://",
+        )
+    })?;
+
+    match scheme {
+        "tcp" => {
+            let mut addrs = location.to_socket_addrs().map_err(|e| {
+                io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!("Invalid tcp socket address `{location}`: {e}"),
+                )
+            })?;
+            if addrs.next().is_none() {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!("Invalid tcp socket address `{location}`"),
+                ));
+            }
+            Ok(ReadinessTarget::Tcp(location.to_string()))
+        }
+        "file" | "unix" => {
+            if location.is_empty() {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!("{}:// must include a filesystem path", scheme),
+                ));
+            }
+            Ok(ReadinessTarget::Path(path_from_uri(location)))
+        }
+        _ => Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!(
+                "Unsupported OPENASTROVIZD_SOCKET scheme `{scheme}`; expected tcp://, unix://, or file://"
+            ),
+        )),
     }
+}
+
+#[cfg(windows)]
+fn path_from_uri(location: &str) -> PathBuf {
+    let bytes = location.as_bytes();
+    if bytes.len() >= 3 && bytes[0] == b'/' && bytes[2] == b':' {
+        PathBuf::from(&location[1..])
+    } else {
+        PathBuf::from(location)
+    }
+}
+
+#[cfg(not(windows))]
+fn path_from_uri(location: &str) -> PathBuf {
+    PathBuf::from(location)
+}
+
+fn readiness_target_ready(target: &ReadinessTarget) -> bool {
+    match target {
+        ReadinessTarget::Tcp(addr) => TcpStream::connect(addr).is_ok(),
+        ReadinessTarget::Path(path) => path.exists(),
+    }
+}
+
 #[cfg(unix)]
 fn is_zombie(pid: u32) -> bool {
     let stat_path = format!("/proc/{pid}/stat");
@@ -495,5 +571,28 @@ mod tests {
         assert_ne!(stale_pid, new_pid_str.trim());
 
         util::cleanup();
+    }
+
+    #[test]
+    fn socket_ready_requires_scheme() {
+        assert!(!socket_ready("127.0.0.1:4242"));
+        assert!(!socket_ready("/tmp/openastrovizd.sock"));
+    }
+
+    #[test]
+    fn parse_readiness_target_rejects_invalid_tcp_target() {
+        let err = parse_readiness_target("tcp://not a socket").expect_err("must reject bad tcp");
+        assert_eq!(err.kind(), io::ErrorKind::InvalidInput);
+    }
+
+    #[test]
+    fn parse_readiness_target_accepts_file_and_unix_schemes() {
+        let file_target =
+            parse_readiness_target("file:///tmp/openastrovizd.sock").expect("file uri parses");
+        let unix_target =
+            parse_readiness_target("unix:///tmp/openastrovizd.sock").expect("unix uri parses");
+
+        assert!(matches!(file_target, ReadinessTarget::Path(_)));
+        assert!(matches!(unix_target, ReadinessTarget::Path(_)));
     }
 }

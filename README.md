@@ -43,6 +43,24 @@ If you don’t have an NVIDIA GPU, skip `cuda/` and work on the **cpu‑simd** r
 
 The validated Vallado SGP4 implementation now lives in the [`core/`](core) crate and is exercised by regression tests against published state vectors.  The earlier Keplerian proof‑of‑concept has been quarantined to [`docs/archive/poc_sgp.cpp`](docs/archive/poc_sgp.cpp) for historical reference.
 
+### Daemon readiness socket format
+
+When using daemon startup readiness checks, `OPENASTROVIZD_SOCKET` now requires
+an explicit scheme:
+
+* `tcp://<host>:<port>` for TCP socket readiness checks.
+* `unix:///absolute/path/to/socket` for Unix domain socket/file readiness checks.
+* `file:///absolute/path/to/socket-or-marker` for filesystem path readiness checks.
+
+Examples:
+
+```bash
+OPENASTROVIZD_SOCKET=tcp://127.0.0.1:8765
+OPENASTROVIZD_SOCKET=unix:///tmp/openastrovizd.sock
+OPENASTROVIZD_SOCKET=file:///tmp/openastrovizd.ready
+OPENASTROVIZD_SOCKET=file:///C:/Temp/openastrovizd.ready  # Windows
+```
+
 ---
 
 ## 🧩 Contributing
